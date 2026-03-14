@@ -20,11 +20,26 @@ bool our::ShaderProgram::attach(const std::string &filename, GLenum type) const 
     const char* sourceCStr = sourceString.c_str();
     file.close();
 
-    //TODO: Complete this function
+    //TODO: Complete this function => completed
     //Note: The function "checkForShaderCompilationErrors" checks if there is
     // an error in the given shader. You should use it to check if there is a
     // compilation error and print it so that you can know what is wrong with
     // the shader. The returned string will be empty if there is no errors.
+    GLuint shader = glCreateShader(type); // create a shader object of the given type (vertex, fragment, etc.)
+    glShaderSource(shader, 1, &sourceCStr, nullptr); // send source code to the shader object
+
+    glCompileShader(shader); // compile the shader
+
+    std::string error = checkForShaderCompilationErrors(shader); // check for compilation errors
+    if (!error.empty()) {
+        std::cerr << "ERROR: Shader compilation failed for shader: " << filename << std::endl;
+        std::cerr << error << std::endl; 
+        glDeleteShader(shader); // delete the shader object to free gpu memory
+        return false;
+    }
+
+    glAttachShader(program, shader); // attach the shader to the program
+    glDeleteShader(shader); // delete the shader object from gpu memory since it's already attached to the program
 
     //We return true if the compilation succeeded
     return true;
@@ -33,12 +48,18 @@ bool our::ShaderProgram::attach(const std::string &filename, GLenum type) const 
 
 
 bool our::ShaderProgram::link() const {
-    //TODO: Complete this function
+    //TODO: Complete this function => completed
     //Note: The function "checkForLinkingErrors" checks if there is
     // an error in the given program. You should use it to check if there is a
     // linking error and print it so that you can know what is wrong with the
     // program. The returned string will be empty if there is no errors.
-
+    glLinkProgram(program); // link the program
+    std::string error = checkForLinkingErrors(program); // check for linking errors
+    if (!error.empty()) {   
+        std::cerr << "ERROR: Program linking failed." << std::endl;
+        std::cerr << error << std::endl; 
+        return false;
+    }
     return true;
 }
 
