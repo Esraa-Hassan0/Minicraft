@@ -1,0 +1,72 @@
+# Build directories
+
+/build/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+Makefile
+cmake_install.cmake
+compile_commands.json
+
+# Binary output
+
+/bin/
+*.out
+*.exe
+*.app
+
+# Object files
+
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.dylib
+
+# Debug files
+
+*.dSYM/
+*.log
+
+# IDE files
+
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# ImGui config
+
+imgui.ini
+
+# Temporary files
+
+*.tmp
+*.temp
+*.swp
+
+# Python environments (if you run scripts)
+
+/venv/
+/.env/
+**pycache**/
+
+# Generated documentation
+
+/docs/
+
+# CMake user presets
+
+CMakeUserPresets.json
+
+/expected
+
+# Since ".obj" are ignored by default, we force them to be added
+!assets/models/**/*.obj
