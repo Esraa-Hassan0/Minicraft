@@ -12,5 +12,12 @@ uniform int size = 32;
 uniform vec3 colors[2];
 
 void main(){
-    frag_color = vec4(colors[0], 1.0);
+    // This gives the pixel coordinates on the screen
+    int X = int(gl_FragCoord.x) / size;
+    int Y = int(gl_FragCoord.y) / size;
+
+    // if the sum is even -> color[0]
+    // if the sum is odd -> color[1]
+    int index = (X + Y) % 2;
+    frag_color = vec4(colors[index], 1.0);
 }
