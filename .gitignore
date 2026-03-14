@@ -67,6 +67,7 @@ imgui.ini
 CMakeUserPresets.json
 
 /expected
+/screenshots
 
 # Since ".obj" are ignored by default, we force them to be added
 !assets/models/**/*.obj

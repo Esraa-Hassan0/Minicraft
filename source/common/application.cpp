@@ -368,13 +368,13 @@ int our::Application::run(int run_for_frames)
                 break;
         }
 
-        float id = 9230209;
-        float r = (int(id / 1) % 16) / 16.0;
-        float g = (int(id / 16) % 16) / 16.0;
-        float b = (int(id / 256) % 16) / 16.0;
-        float a = 1.0;
-        glClearColor(r, g, b, a);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // float id = 9230209;
+        // float r = (int(id / 1) % 16) / 16.0;
+        // float g = (int(id / 16) % 16) / 16.0;
+        // float b = (int(id / 256) % 16) / 16.0;
+        // float a = 1.0;
+        // glClearColor(r, g, b, a);
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         // Swap the frame buffers
         glfwSwapBuffers(window);
 
