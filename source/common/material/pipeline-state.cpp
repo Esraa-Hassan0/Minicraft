@@ -3,6 +3,36 @@
 
 namespace our {
 
+    void PipelineState::setup() const {
+        // Set the OpenGL state according to the values stored in this structure
+        // For example, if faceCulling.enabled is true, you should call glEnable(GL_CULL_FACE), otherwise, you should call glDisable(GL_CULL_FACE)
+        if(faceCulling.enabled){
+            glEnable(GL_CULL_FACE);
+            glCullFace(faceCulling.culledFace);
+            glFrontFace(faceCulling.frontFace);
+        } else {
+            glDisable(GL_CULL_FACE);
+        }
+
+        if(depthTesting.enabled){
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(depthTesting.function);
+        } else {
+            glDisable(GL_DEPTH_TEST);
+        }
+
+        if(blending.enabled){
+            glEnable(GL_BLEND);
+            glBlendEquation(blending.equation);
+            glBlendFunc(blending.sourceFactor, blending.destinationFactor);
+            glBlendColor(blending.constantColor.r, blending.constantColor.g, blending.constantColor.b, blending.constantColor.a);
+        } else {
+            glDisable(GL_BLEND);
+        }
+
+        glColorMask(colorMask.r, colorMask.g, colorMask.b, colorMask.a);
+        glDepthMask(depthMask);
+    }
     // Given a json object, this function deserializes a PipelineState structure
     void PipelineState::deserialize(const nlohmann::json& data){
         // If the given json data does not represent a json object, return
