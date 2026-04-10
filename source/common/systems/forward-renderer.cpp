@@ -46,7 +46,7 @@ namespace our {
             this->skyMaterial->sampler = skySampler;
             this->skyMaterial->pipelineState = skyPipelineState;
             this->skyMaterial->tint = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-            this->skyMaterial->alphaThreshold = 1.0f;
+            this->skyMaterial->alphaThreshold = 0.0f;
             this->skyMaterial->transparent = false;
         }
 
@@ -91,6 +91,9 @@ namespace our {
             // The default options are fine but we don't need to interact with the depth buffer
             // so it is more performant to disable the depth mask
             postprocessMaterial->pipelineState.depthMask = false;
+            postprocessMaterial->pipelineState.depthTesting.enabled = false;
+            postprocessMaterial->alphaThreshold = 0.0f;
+            postprocessMaterial->tint = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         }
     }
 
@@ -192,13 +195,10 @@ namespace our {
             //TODO: (Req 10) Create a model matrix for the sy such that it always follows the camera (sky sphere center = camera position)
             glm::mat4 skyModel = glm::translate(glm::mat4(1.0f), cameraPosition);
             //TODO: (Req 10) We want the sky to be drawn behind everything (in NDC space, z=1)
-            // We can acheive the is by multiplying by an extra matrix after the projection but what values should we put in it?
-            glm::mat4 alwaysBehindTransform = glm::mat4(
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 1.0f
-            );
+            // We can achieve this by forcing clip-space z to equal clip-space w.
+            glm::mat4 alwaysBehindTransform = glm::mat4(1.0f);
+            alwaysBehindTransform[2][2] = 0.0f;
+            alwaysBehindTransform[3][2] = 1.0f;
             //TODO: (Req 10) set the "transform" uniform
             this->skyMaterial->shader->set("transform", alwaysBehindTransform * VP * skyModel);
             //TODO: (Req 10) draw the sky sphere
@@ -216,6 +216,7 @@ namespace our {
         if(postprocessMaterial){
             //TODO: (Req 11) Return to the default framebuffer
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             //TODO: (Req 11) Setup the postprocess material and draw the fullscreen triangle
             postprocessMaterial->setup();
             glBindVertexArray(postProcessVertexArray);
