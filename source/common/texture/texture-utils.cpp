@@ -7,9 +7,21 @@
 
 our::Texture2D* our::texture_utils::empty(GLenum format, glm::ivec2 size){
     our::Texture2D* texture = new our::Texture2D();
-    //TODO: (Req 11) Finish this function to create an empty texture with the given size and format
     texture->bind();
-    glTextureSubImage2D(texture->getOpenGLName(), 0, 0, 0, size.x, size.y, format, GL_UNSIGNED_BYTE, nullptr);
+
+    GLenum base_format = GL_RGBA;
+    GLenum type = GL_UNSIGNED_BYTE;
+    if(format == GL_DEPTH_COMPONENT24) {
+        base_format = GL_DEPTH_COMPONENT;
+        type = GL_UNSIGNED_INT;
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, size.x, size.y, 0, base_format, type, nullptr);
+
+    // Prevent incomplete texture state on strict drivers when only base level exists.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
     texture->unbind();
     return texture;
 }
