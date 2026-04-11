@@ -47,7 +47,7 @@ namespace our
             // generate and upload index data into the EBO
             glGenBuffers(1, &EBO);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(Vertex), elements.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(unsigned int), elements.data(), GL_STATIC_DRAW);
 
             // define vertex attribute pointers (recorded into the VAO)
 
