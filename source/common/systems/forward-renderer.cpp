@@ -46,7 +46,7 @@ namespace our {
             this->skyMaterial->sampler = skySampler;
             this->skyMaterial->pipelineState = skyPipelineState;
             this->skyMaterial->tint = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-            this->skyMaterial->alphaThreshold = 0.0f;
+            this->skyMaterial->alphaThreshold = 1.0f;
             this->skyMaterial->transparent = false;
         }
 
