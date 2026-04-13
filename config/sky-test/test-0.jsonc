@@ -17,11 +17,13 @@
     },
     "scene": {
         "renderer": {
+            // Minimal sky-only case: verifies the sky path without scene meshes.
             "sky": "assets/textures/sky.jpg"
         },
         "assets":{},
         "world":[
             {
+                // Camera exists only to drive the view; sky should follow this transform.
                 "position": [0, 0, 10],
                 "components": [
                     {

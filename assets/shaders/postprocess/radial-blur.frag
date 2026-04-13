@@ -17,6 +17,7 @@ void main(){
     vec2 step_vector = (tex_coord - 0.5) * (STRENGTH / STEPS);
     // Then we sample multiple pixels along that direction and compute the average
     frag_color = vec4(0, 0, 0, 0);  // explicitly start accumulator at zero
+    // Farther pixels get a larger step, so blur grows toward the corners.
     for(int i = 0; i < STEPS; i++){
         frag_color += texture(tex, tex_coord + step_vector * i);    
     }

@@ -17,6 +17,7 @@
     },
     "scene": {
         "renderer": {
+            // Sky texture is rendered after opaques and before transparents.
             "sky": "assets/textures/sky.jpg"
         },
         "assets":{
@@ -133,6 +134,7 @@
         },
         "world":[
             {
+                // Same camera path as other tests; sky must stay centered on camera.
                 "position": [0, 0, 10],
                 "components": [
                     {

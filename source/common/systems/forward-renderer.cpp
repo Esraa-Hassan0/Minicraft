@@ -68,6 +68,7 @@ namespace our {
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTarget->getOpenGLName(), 0);
 
             //TODO: (Req 11) Unbind the framebuffer just to be safe
+            // Leave no FBO bound here so later passes choose explicitly.
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
             // Create a vertex array to use for drawing the texture
@@ -201,8 +202,10 @@ namespace our {
         // If there is a sky material, draw the sky
         if(this->skyMaterial){
             //TODO: (Req 10) setup the sky material
+            // This applies sky texture + pipeline state before drawing.
             this->skyMaterial->setup();
             //TODO: (Req 10) Get the camera position
+            // w=1 keeps translation so we get the camera world position.
             glm::vec3 cameraPosition = camera->getOwner()->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
             //TODO: (Req 10) Create a model matrix for the sky such that it always follows the camera (sky sphere center = camera position)
             glm::mat4 skyModel = glm::translate(glm::mat4(1.0f), cameraPosition);
@@ -212,8 +215,10 @@ namespace our {
             alwaysBehindTransform[2][2] = 0.0f;
             alwaysBehindTransform[3][2] = 1.0f;
             //TODO: (Req 10) set the "transform" uniform
+            // Combine sky model with VP, then push it to the back using alwaysBehindTransform.
             this->skyMaterial->shader->set("transform", alwaysBehindTransform * VP * skyModel);
             //TODO: (Req 10) draw the sky sphere
+            // Drawing the sphere from inside gives us a full sky background.
             this->skySphere->draw();
         }
         //TODO: (Req 9) Draw all the transparent commands
@@ -227,6 +232,7 @@ namespace our {
         // If there is a postprocess material, apply postprocessing
         if(postprocessMaterial){
             //TODO: (Req 11) Return to the default framebuffer
+            // Back to the screen framebuffer for the final postprocess output.
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             // Second pass: one fullscreen triangle runs the postprocess shader on scene color.

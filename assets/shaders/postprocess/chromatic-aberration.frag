@@ -20,8 +20,10 @@ void main(){
     // To apply this effect, we only read the green channel from the correct pixel (as defined by tex_coord)
     // To get the red channel, we move by amount STRENGTH to the left then sample another pixel from which we take the red channel
     // To get the blue channel, we move by amount STRENGTH to the right then sample another pixel from which we take the blue channel
+    // Keep green in place, then split red/blue in opposite directions.
     float r = texture(tex, vec2(tex_coord.x - STRENGTH, tex_coord.y)).r;
     float g = texture(tex, tex_coord).g;
     float b = texture(tex, vec2(tex_coord.x + STRENGTH, tex_coord.y)).b;
+    // Recombine shifted channels into the final color.
     frag_color = vec4(r, g, b, 1.0);
 }
