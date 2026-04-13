@@ -33,27 +33,27 @@ namespace our
             // TODO: (Req 2) Write this function
             //  remember to store the number of elements in "elementCount" since you will need it for drawing
             //  For the attribute locations, use the constants defined above: ATTRIB_LOC_POSITION, ATTRIB_LOC_COLOR, etc
-            elementCount = static_cast<GLsizei>(elements.size()); // store the number of elements in "elementCount"
+            elementCount = static_cast<GLsizei>(elements.size()); // store the number of elements in "elementCount",  elements.size() returns a size_t, but OpenGL expects counts as GLsizei, not size_t
 
             // generate and bind the vertex arr
-            glGenVertexArrays(1, &VAO);
-            glBindVertexArray(VAO);
+            glGenVertexArrays(1, &VAO); // Creates a Vertex Array Object (VAO) in GPU memory, Stores its ID in VAO
+            glBindVertexArray(VAO);     // Makes this VAO the current active VAO
 
             // generate and upload vertex data into VBO
             glGenBuffers(1, &VBO);
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
-            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW); // Copy CPU vertex data → GPU memory
 
             // generate and upload index data into the EBO
             glGenBuffers(1, &EBO);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(Vertex), elements.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(unsigned int), elements.data(), GL_STATIC_DRAW);
 
             // define vertex attribute pointers (recorded into the VAO)
 
             // position: vec3 at offset of 'position' field
             glEnableVertexAttribArray(ATTRIB_LOC_POSITION);
-            glVertexAttribPointer(ATTRIB_LOC_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position));
+            glVertexAttribPointer(ATTRIB_LOC_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position)); //(void *)offsetof => OpenGL expects a byte offset pointer, not an integer
 
             // color: vec4 of unit8 norm to [0,1]
             glEnableVertexAttribArray(ATTRIB_LOC_COLOR);
@@ -68,16 +68,23 @@ namespace our
             glVertexAttribPointer(ATTRIB_LOC_NORMAL, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, normal));
 
             // unbind VAO to avoid accidental modification
-            glBindVertexArray(0);
+            glBindVertexArray(0); // Lock the configuration so nothing else overwrites it
         }
 
         // this function should render the mesh
         void draw()
         {
             // TODO: (Req 2) Write this function
-            glBindVertexArray(VAO);
+            glBindVertexArray(VAO); // The VAO already remembers:
+                                    // which VBO to use
+                                    // which EBO to use
+                                    // how vertex attributes are laid out
+                                    // So this single line restores everything needed to draw.
             glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_INT, nullptr);
-            glBindVertexArray(0);
+            // GL_UNSIGNED_INT => Type of indices in the EBO
+            // nullptr => Offset inside EBO
+            // nullptr = start from beginning
+            glBindVertexArray(0); // Lock the configuration so nothing else overwrites it
         }
 
         // this function should delete the vertex & element buffers and the vertex array object
