@@ -10,6 +10,7 @@ out vec4 frag_color;
 
 // Vignette is a postprocessing effect that darkens the corners of the screen
 // to grab the attention of the viewer towards the center of the screen
+// Req 11: this shader runs in the fullscreen postprocess pass.
 
 void main(){
     vec2 ndc = tex_coord * 2.0 - 1.0;

@@ -31,12 +31,15 @@ namespace our
         glm::ivec2 windowSize;
         // These are two vectors in which we will store the opaque and the transparent commands.
         // We define them here (instead of being local to the "render" function) as an optimization to prevent reallocating them every frame
+        // Req 9: draw opaque first, then sort transparent commands for correct blending.
         std::vector<RenderCommand> opaqueCommands;
         std::vector<RenderCommand> transparentCommands;
         // Objects used for rendering a skybox
+        // Req 10: sky sphere + material are prepared once and reused every frame.
         Mesh* skySphere;
         TexturedMaterial* skyMaterial;
         // Objects used for Postprocessing
+        // Req 11: offscreen framebuffer resources for the second fullscreen postprocess pass.
         GLuint postprocessFrameBuffer, postProcessVertexArray;
         Texture2D *colorTarget, *depthTarget;
         TexturedMaterial* postprocessMaterial;
@@ -47,6 +50,7 @@ namespace our
         // Clean up the renderer
         void destroy();
         // This function should be called every frame to draw the given world
+        // Req 9/10/11 order in render: opaque -> sky -> transparent -> postprocess.
         void render(World* world);
 
 

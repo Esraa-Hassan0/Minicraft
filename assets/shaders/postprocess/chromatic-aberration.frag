@@ -14,6 +14,7 @@ out vec4 frag_color;
 // Chromatic aberration mimics some old cameras where the lens disperses light
 // differently based on its wavelength. In this shader, we will implement a
 // cheap version of that effect 
+// Req 11: this effect is applied after rendering the scene to an offscreen texture.
 
 void main(){
     //TODO: Modify this shader to apply chromatic abberation

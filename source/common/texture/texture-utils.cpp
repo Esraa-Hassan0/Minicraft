@@ -5,6 +5,8 @@
 
 #include <iostream>
 
+// Req 9 is handled in forward rendering order; this utility file supports Req 10/11 texture data.
+
 our::Texture2D* our::texture_utils::empty(GLenum format, glm::ivec2 size){
     our::Texture2D* texture = new our::Texture2D();
     texture->bind();
@@ -12,6 +14,7 @@ our::Texture2D* our::texture_utils::empty(GLenum format, glm::ivec2 size){
     GLenum base_format = GL_RGBA;
     GLenum type = GL_UNSIGNED_BYTE;
     if(format == GL_DEPTH_COMPONENT24) {
+        // Req 11: depth target for the offscreen framebuffer.
         base_format = GL_DEPTH_COMPONENT;
         type = GL_UNSIGNED_INT;
     }
@@ -29,6 +32,7 @@ our::Texture2D* our::texture_utils::empty(GLenum format, glm::ivec2 size){
 our::Texture2D* our::texture_utils::loadImage(const std::string& filename, bool generate_mipmap) {
     glm::ivec2 size;
     int channels;
+    // Req 10: sky textures are loaded through this path.
     //Since OpenGL puts the texture origin at the bottom left while images typically has the origin at the top left,
     //We need to till stb to flip images vertically after loading them
     stbi_set_flip_vertically_on_load(true);
