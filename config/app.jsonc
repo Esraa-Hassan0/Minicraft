@@ -23,6 +23,10 @@
                 "textured":{
                     "vs":"assets/shaders/textured.vert",
                     "fs":"assets/shaders/textured.frag"
+                },
+                "lit":{
+                    "vs":"assets/shaders/lit.vert",
+                    "fs":"assets/shaders/lit.frag"
                 }
             },
             "textures":{
@@ -57,6 +61,48 @@
                         }
                     },
                     "tint": [0.45, 0.4, 0.5, 1]
+                },
+                "lit-red":{
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling":{
+                            "enabled": false
+                        },
+                        "depthTesting":{
+                            "enabled": true
+                        }
+                    },
+                    "tint": [1, 0.3, 0.3, 1],
+                    "shininess": 32.0
+                },
+                "lit-blue":{
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling":{
+                            "enabled": false
+                        },
+                        "depthTesting":{
+                            "enabled": true
+                        }
+                    },
+                    "tint": [0.3, 0.3, 1.0, 1],
+                    "shininess": 64.0
+                },
+                "lit-gold":{
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling":{
+                            "enabled": false
+                        },
+                        "depthTesting":{
+                            "enabled": true
+                        }
+                    },
+                    "tint": [1.0, 0.84, 0.0, 1],
+                    "shininess": 128.0
                 },
                 "glass":{
                     "type": "textured",
