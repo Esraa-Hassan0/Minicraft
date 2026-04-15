@@ -78,13 +78,6 @@ namespace our
 
             entities.clear();
 
-            for (Entity *entity : markedForRemoval)
-            {
-                entities.erase(entity); // (deleteMarkedEntities may not have been called before clear)
-
-                delete entity;
-            }
-
             markedForRemoval.clear();
         }
 
