@@ -2,6 +2,7 @@
 
 #include "../asset-loader.hpp"
 #include "deserialize-utils.hpp"
+#include "../texture/texture-utils.hpp"
 
 namespace our {
 
@@ -61,6 +62,69 @@ namespace our {
         alphaThreshold = data.value("alphaThreshold", 0.0f);
         texture = AssetLoader<Texture2D>::get(data.value("texture", ""));
         sampler = AssetLoader<Sampler>::get(data.value("sampler", ""));
+    }
+
+    // Sets up the LitMaterial for rendering.
+// Calls parent TexturedMaterial::setup() for albedo texture,
+// then adds shininess uniform and optional specular map on texture unit 1.
+void LitMaterial::setup() const {
+        TexturedMaterial::setup();
+        if(shader) {
+            shader->set("shininess", shininess);
+            if(texture && sampler) {
+                texture->bind();
+                sampler->bind(0);
+                shader->set("albedoTex", 0);
+            } else {
+                static our::Texture2D* fallbackWhite = nullptr;
+                if(!fallbackWhite) {
+                    fallbackWhite = new our::Texture2D();
+                    fallbackWhite->bind();
+                    unsigned char white[4] = {255, 255, 255, 255};
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+                    fallbackWhite->unbind();
+                }
+                fallbackWhite->bind();
+                if(sampler) sampler->bind(0);
+                shader->set("albedoTex", 0);
+            }
+            if(specularMap && specularSampler) {
+                specularMap->bind();
+                specularSampler->bind(1);
+                shader->set("specularTex", 1);
+            } else {
+                static our::Texture2D* fallbackBlack = nullptr;
+                if(!fallbackBlack) {
+                    fallbackBlack = new our::Texture2D();
+                    fallbackBlack->bind();
+                    unsigned char black[4] = {0, 0, 0, 255};
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, black);
+                    fallbackBlack->unbind();
+                }
+                fallbackBlack->bind();
+                if(specularSampler) specularSampler->bind(1);
+                shader->set("specularTex", 1);
+            }
+        }
+    }
+
+    // Deserializes LitMaterial properties from JSON.
+    // Expected fields:
+    //   - shininess: Phong exponent (default: 32.0)
+    //   - specularMap: name of specular texture in AssetLoader
+    //   - specularSampler: name of sampler in AssetLoader
+    void LitMaterial::deserialize(const nlohmann::json& data) {
+        // Deserialize parent first (albedo, pipeline, shader)
+        TexturedMaterial::deserialize(data);
+
+        if(!data.is_object()) return;
+
+        // Parse shininess exponent
+        shininess = data.value("shininess", 32.0f);
+
+        // Load specular map and sampler from AssetLoader by name
+        specularMap = AssetLoader<Texture2D>::get(data.value("specularMap", ""));
+        specularSampler = AssetLoader<Sampler>::get(data.value("specularSampler", ""));
     }
 
 }
