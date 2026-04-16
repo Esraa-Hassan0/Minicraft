@@ -18,7 +18,7 @@ namespace our
         Sampler()
         {
             // TODO: (Req 6) Complete this function
-            glGenSamplers(1, &name);
+            glGenSamplers(1, &name); // Stores its ID in name
         };
 
         // This deconstructor deletes the underlying OpenGL sampler
@@ -32,14 +32,14 @@ namespace our
         void bind(GLuint textureUnit) const
         {
             // TODO: (Req 6) Complete this function
-            glBindSampler(textureUnit, name);
+            glBindSampler(textureUnit, name); // Attaches this sampler to a texture unit
         }
 
         // This static method ensures that no sampler is bound to the given texture unit
         static void unbind(GLuint textureUnit)
         {
             // TODO: (Req 6) Complete this function
-            glBindSampler(textureUnit, 0);
+            glBindSampler(textureUnit, 0); // Removes any sampler from that texture unit
         }
 
         // This function sets a sampler paramter where the value is of type "GLint"
