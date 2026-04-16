@@ -80,6 +80,10 @@ class Playstate: public our::State {
         if(config.contains("world")){
             engineWorld.deserialize(config["world"]);
         }
+        if(config.contains("terrain")){
+            terrainWorld.deserialize(config["terrain"]);
+        }
+        terrainWorld.generate();
         // We initialize the camera controller system since it needs a pointer to the app
         cameraController.enter(getApp());
         // Then we initialize the renderer

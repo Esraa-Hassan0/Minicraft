@@ -1,22 +1,23 @@
 #include "world.hpp"
 #include <random>
+#include <cmath>
 #include <glm/glm.hpp>
 namespace voxel {
 
-World::World() : blocks(static_cast<std::size_t>(WIDTH) * HEIGHT * DEPTH, 0) {
-    const int WATER_LEVEL = 6;
-    const int Stone_LEVEL = 4;
-    for(int z = 0; z < DEPTH; ++z) {
-        for(int x = 0; x < WIDTH; ++x) {
+void World::generate() {
+    // This is your exact same terrain code, just moved into its own function!
+    for(int z = 0; z < depth; ++z) {
+        for(int x = 0; x < width; ++x) {
             float hills = std::sin(x * 0.2f) + std::cos(z * 0.2f); 
             int surfaceHeight = 8 + static_cast<int>(hills * 2.0f);
-            for (int y=0 ; y< HEIGHT; y++){
-                if(y<=Stone_LEVEL){
+            
+            for (int y = 0 ; y < height; ++y) {
+                if (y <= stoneLevel) {
                     setBlock(x, y, z, STONE);
                 } 
                 else if (y <= surfaceHeight) {
-                    if(y== surfaceHeight){
-                        if (y <= WATER_LEVEL + 1) {
+                    if (y == surfaceHeight) {
+                        if (y <= waterLevel + 1) {
                             setBlock(x, y, z, SAND);
                         } 
                         else {
@@ -27,11 +28,11 @@ World::World() : blocks(static_cast<std::size_t>(WIDTH) * HEIGHT * DEPTH, 0) {
                             }
                         }
                     }
-                    else{
+                    else {
                         setBlock(x, y, z, STONE);
                     }
                 }
-                else if (y <= WATER_LEVEL) {
+                else if (y <= waterLevel) {
                     setBlock(x, y, z, WATER);
                 }
             }
@@ -39,14 +40,28 @@ World::World() : blocks(static_cast<std::size_t>(WIDTH) * HEIGHT * DEPTH, 0) {
     }
 }
 
+void World::deserialize(const nlohmann::json& data) {
+    // Read values from JSON, using the second argument as a fallback default
+    width = data.value("width", 16);
+    height = data.value("height", 16);
+    depth = data.value("depth", 16);
+    waterLevel = data.value("waterLevel", 6);
+    stoneLevel = data.value("stoneLevel", 4);
+
+    // Resize the block array to the new size and fill it with AIR (0)
+    blocks.assign(static_cast<std::size_t>(width) * height * depth, 0);
+}
+
+
+
 bool World::isInside(int x, int y, int z) const {
-    return x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && z >= 0 && z < DEPTH;
+    return x >= 0 && x < width && y >= 0 && y < height && z >= 0 && z < depth;
 }
 
 std::size_t World::flatten(int x, int y, int z) const {
     return static_cast<std::size_t>(x) +
-           static_cast<std::size_t>(WIDTH) *
-               (static_cast<std::size_t>(y) + static_cast<std::size_t>(HEIGHT) * static_cast<std::size_t>(z));
+           static_cast<std::size_t>(width) *
+               (static_cast<std::size_t>(y) + static_cast<std::size_t>(height) * static_cast<std::size_t>(z));
 }
 
 int World::getBlock(int x, int y, int z) const {
@@ -96,9 +111,9 @@ std::vector<BlockData> World::getVisibleBlocks() const {
     std::vector<BlockData> visibleBlocks;
     visibleBlocks.reserve(blocks.size() / 4);
 
-    for (int z = 0; z < DEPTH; ++z) {
-        for (int y = 0; y < HEIGHT; ++y) {
-            for (int x = 0; x < WIDTH; ++x) {
+    for (int z = 0; z < depth; ++z) {
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
                 const int type = getBlock(x, y, z);
                 if (type == 0 || !isBlockVisible(x, y, z)) {
                     continue;

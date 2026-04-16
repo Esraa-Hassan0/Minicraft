@@ -4,7 +4,7 @@
 #include <vector>
 #include "types.hpp"
 #include <glm/glm.hpp>
-
+#include <json/json.hpp>
 namespace voxel {
 
 struct BlockData {
@@ -21,11 +21,16 @@ struct RayHit {
 };
 class World {
 public:
-    static constexpr int WIDTH = 64;
-    static constexpr int HEIGHT = 32;
-    static constexpr int DEPTH = 64;
+    int width = 64;
+    int height = 32;
+    int depth = 64;
+    int stoneLevel = 4;
+    int waterLevel = 6;
 
-    World();
+    World() = default;
+
+    void deserialize(const nlohmann::json& data);
+    void generate();
 
     int getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, int type);
