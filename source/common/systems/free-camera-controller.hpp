@@ -25,10 +25,16 @@ namespace our
         // When a state enters, it should call this function and give it the pointer to the application
         void enter(Application* app){
             this->app = app;
+            if(this->app && !mouse_locked){
+                this->app->getMouse().lockMouse(this->app->getWindow());
+                mouse_locked = true;
+            }
         }
 
         // This should be called every frame to update all entities containing a FreeCameraControllerComponent 
         void update(World* world, float deltaTime) {
+            if(!app) return;
+
             // First of all, we search for an entity containing both a CameraComponent and a FreeCameraControllerComponent
             // As soon as we find one, we break
             CameraComponent* camera = nullptr;
@@ -43,23 +49,12 @@ namespace our
             // Get the entity that we found via getOwner of camera (we could use controller->getOwner())
             Entity* entity = camera->getOwner();
 
-            // If the left mouse button is pressed, we lock and hide the mouse. This common in First Person Games.
-            if(app->getMouse().isPressed(GLFW_MOUSE_BUTTON_1) && !mouse_locked){
-                app->getMouse().lockMouse(app->getWindow());
-                mouse_locked = true;
-            // If the left mouse button is released, we unlock and unhide the mouse.
-            } else if(!app->getMouse().isPressed(GLFW_MOUSE_BUTTON_1) && mouse_locked) {
-                app->getMouse().unlockMouse(app->getWindow());
-                mouse_locked = false;
-            }
-
             // We get a reference to the entity's position and rotation
             glm::vec3& position = entity->localTransform.position;
             glm::vec3& rotation = entity->localTransform.rotation;
 
-            // If the left mouse button is pressed, we get the change in the mouse location
-            // and use it to update the camera rotation
-            if(app->getMouse().isPressed(GLFW_MOUSE_BUTTON_1)){
+            // Apply mouse-look continuously while the cursor is locked (Minecraft-style).
+            if(mouse_locked){
                 glm::vec2 delta = app->getMouse().getMouseDelta();
                 rotation.x -= delta.y * controller->rotationSensitivity; // The y-axis controls the pitch
                 rotation.y -= delta.x * controller->rotationSensitivity; // The x-axis controls the yaw
@@ -102,7 +97,7 @@ namespace our
 
         // When the state exits, it should call this function to ensure the mouse is unlocked
         void exit(){
-            if(mouse_locked) {
+            if(app && mouse_locked) {
                 mouse_locked = false;
                 app->getMouse().unlockMouse(app->getWindow());
             }
