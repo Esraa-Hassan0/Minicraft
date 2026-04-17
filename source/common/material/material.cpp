@@ -48,6 +48,7 @@ namespace our {
         if(shader){
             shader->set("alphaThreshold", alphaThreshold);
             if(texture && sampler){
+                glActiveTexture(GL_TEXTURE0);
                 texture->bind();
                 sampler->bind(0);
                 shader->set("tex", 0);
@@ -72,6 +73,7 @@ void LitMaterial::setup() const {
         if(shader) {
             shader->set("shininess", shininess);
             if(texture && sampler) {
+                glActiveTexture(GL_TEXTURE0);
                 texture->bind();
                 sampler->bind(0);
                 shader->set("albedoTex", 0);
@@ -84,11 +86,13 @@ void LitMaterial::setup() const {
                     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
                     fallbackWhite->unbind();
                 }
+                glActiveTexture(GL_TEXTURE0);
                 fallbackWhite->bind();
                 if(sampler) sampler->bind(0);
                 shader->set("albedoTex", 0);
             }
             if(specularMap && specularSampler) {
+                glActiveTexture(GL_TEXTURE1);
                 specularMap->bind();
                 specularSampler->bind(1);
                 shader->set("specularTex", 1);
@@ -101,6 +105,7 @@ void LitMaterial::setup() const {
                     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, black);
                     fallbackBlack->unbind();
                 }
+                glActiveTexture(GL_TEXTURE1);
                 fallbackBlack->bind();
                 if(specularSampler) specularSampler->bind(1);
                 shader->set("specularTex", 1);

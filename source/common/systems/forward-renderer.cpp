@@ -17,10 +17,10 @@ namespace our
             // First, we create a sphere which will be used to draw the sky
             this->skySphere = mesh_utils::sphere(glm::ivec2(16, 16));
 
-            // We can draw the sky using the same shader used to draw textured objects
+            // We can draw the sky using the lit shader instead of textured
             ShaderProgram *skyShader = new ShaderProgram();
-            skyShader->attach("assets/shaders/textured.vert", GL_VERTEX_SHADER);
-            skyShader->attach("assets/shaders/textured.frag", GL_FRAGMENT_SHADER);
+            skyShader->attach("assets/shaders/lit.vert", GL_VERTEX_SHADER);
+            skyShader->attach("assets/shaders/lit.frag", GL_FRAGMENT_SHADER);
             skyShader->link();
 
             // TODO: (Req 10) Pick the correct pipeline state to draw the sky
@@ -44,12 +44,14 @@ namespace our
             skySampler->set(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
             // Combine all the aforementioned objects (except the mesh) into a material
-            this->skyMaterial = new TexturedMaterial();
+            LitMaterial* litSkyMat = new LitMaterial();
+            litSkyMat->shininess = 256.0f; // making it shiny
+            this->skyMaterial = litSkyMat;
             this->skyMaterial->shader = skyShader;
             this->skyMaterial->texture = skyTexture;
             this->skyMaterial->sampler = skySampler;
             this->skyMaterial->pipelineState = skyPipelineState;
-            this->skyMaterial->tint = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            this->skyMaterial->tint = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f); // making it blue-like
             this->skyMaterial->alphaThreshold = 1.0f;
             this->skyMaterial->transparent = false;
         }
@@ -170,6 +172,7 @@ namespace our
             // Each LightComponent becomes a LightData sent to lit shaders each frame
             if (auto *lc = entity->getComponent<LightComponent>())
             {
+                if (!lc->enabled) continue;
                 LightData ld;
                 ld.type = (int)lc->type;
 
@@ -320,6 +323,18 @@ namespace our
             alwaysBehindTransform[3][2] = 1.0f;
             // TODO: (Req 10) set the "transform" uniform
             this->skyMaterial->shader->set("transform", alwaysBehindTransform * VP * skyModel);
+            
+            if (auto* litSky = dynamic_cast<LitMaterial*>(this->skyMaterial)) {
+                auto* sh = litSky->shader;
+                sh->set("model", skyModel);
+                sh->set("normalMatrix", glm::mat3(glm::transpose(glm::inverse(skyModel))));
+                uploadLights(sh, cameraPosition);
+                
+                // Disable damage flash entirely for the sky
+                sh->set("flashStrength", 0.0f); 
+                sh->set("flashColor", glm::vec3(0.0f));
+            }
+
             // TODO: (Req 10) draw the sky sphere
             this->skySphere->draw();
         }

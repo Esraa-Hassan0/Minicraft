@@ -50,6 +50,12 @@
                 "components": [
                     {"type": "Light", "lightType": "spot", "color": [1.0, 0.95, 0.8], "ambient": [0.1, 0.1, 0.1], "innerCutoff": 5.0, "outerCutoff": 10.0}
                 ]
+            },
+            {
+                "rotation": [-45, 45, 0],
+                "components": [
+                    {"type": "Light", "lightType": "directional", "color": [0.3, 0.6, 1.0], "ambient": [0.1, 0.2, 0.3]}
+                ]
             }
         ]
     }

@@ -129,8 +129,12 @@ void main() {
 
     // Accumulate lighting from all active lights
     vec3 result = vec3(0.0);
-    for (int i = 0; i < numLights && i < MAX_LIGHTS; i++) {
-        result += calcLight(lights[i], N, V, albedoSample.rgb, specSample);
+    if (numLights > 0) {
+        for (int i = 0; i < numLights && i < MAX_LIGHTS; i++) {
+            result += calcLight(lights[i], N, V, albedoSample.rgb, specSample);
+        }
+    } else {
+        result = albedoSample.rgb * vec3(0.1);
     }
 
     // Apply damage flash effect (blend if active)

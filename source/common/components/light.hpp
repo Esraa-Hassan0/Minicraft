@@ -45,6 +45,8 @@ namespace our {
         glm::vec3 flashColor  = {1.0f, 0.0f, 0.0f};  // Color when flashing (red)
         float     flashTimer  = 0.0f;  // Countdown timer for flash duration
 
+        bool enabled = false; // enable this light
+
         // Returns component type identifier for deserialization
         static std::string getID() { return "Light"; }
         // Deserializes light properties from JSON configuration
