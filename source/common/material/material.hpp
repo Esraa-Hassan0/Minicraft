@@ -53,12 +53,33 @@ namespace our {
         void deserialize(const nlohmann::json& data) override;
     };
 
+    // Material supporting Blinn-Phong lighting with texture maps.
+// Inherits from TexturedMaterial (albedo texture) and adds specular map.
+// Uses lit.vert/lit.frag shaders for per-fragment lighting.
+    class LitMaterial : public TexturedMaterial {
+    public:
+        // Specular map (unit 1): grayscale texture controlling specular intensity
+        // White = full specular reflection, black = no specular
+        Texture2D* specularMap = nullptr;
+        Sampler* specularSampler = nullptr;
+        // Shininess exponent: higher = smaller, sharper specular highlight
+        // Typical range: 8.0 (rough) to 128.0 (shiny)
+        float shininess = 32.0f;
+
+        // Sets up pipeline state and binds specular map to texture unit 1
+        void setup() const override;
+        // Reads material properties from JSON (specularMap, specularSampler, shininess)
+        void deserialize(const nlohmann::json& data) override;
+    };
+
     // This function returns a new material instance based on the given type
     inline Material* createMaterialFromType(const std::string& type){
         if(type == "tinted"){
             return new TintedMaterial();
         } else if(type == "textured"){
             return new TexturedMaterial();
+        } else if(type == "lit"){
+            return new LitMaterial();
         } else {
             return new Material();
         }

@@ -187,6 +187,20 @@ if( ($tests.Count -eq 0) -or ($tests -contains "sky-test")){
     Invoke-Tests $configs
 }
 
+if( ($tests.Count -eq 0) -or ($tests -contains "lighting-test")){
+    $configs = @(
+        "config/lighting-test/directional.jsonc",
+        "config/lighting-test/point.jsonc",
+        "config/lighting-test/spot.jsonc",
+        "config/lighting-test/spot-narrow.jsonc",
+        "config/lighting-test/multi.jsonc"
+    )
+    Write-Output ""
+    Write-Output "Running lighting-test:"
+    Write-Output ""
+    Invoke-Tests $configs
+}
+
 ###################################################
 ###################################################
 

@@ -1,0 +1,62 @@
+{
+    "start-scene": "renderer-test",
+    "window": {
+        "title": "Narrow Spot Light Test",
+        "size": {"width": 512, "height": 512},
+        "fullscreen": false
+    },
+    "screenshots": {
+        "directory": "screenshots/lighting",
+        "requests": [{"file": "spot-narrow.png", "frame": 1}]
+    },
+    "scene": {
+        "renderer": {"sky": "assets/textures/sky.jpg"},
+        "assets": {
+            "shaders": {
+                "lit": {"vs": "assets/shaders/lit.vert", "fs": "assets/shaders/lit.frag"}
+            },
+            "textures": {
+                "color-grid": "assets/textures/color-grid.png"
+            },
+            "meshes": {"sphere": "assets/models/sphere.obj"},
+            "samplers": {"default": {}},
+            "materials": {
+                "lit-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {"faceCulling": {"enabled": false}, "depthTesting": {"enabled": true}},
+                    "texture": "color-grid",
+                    "sampler": "default",
+                    "tint": [0.8, 0.8, 0.8, 1],
+                    "shininess": 64.0
+                }
+            }
+        },
+        "world": [
+            {
+                "position": [0, 0, 8],
+                "components": [{"type": "Camera"}]
+            },
+            {
+                "position": [0, 0, 0],
+                "scale": [1.5, 1.5, 1.5],
+                "components": [
+                    {"type": "Mesh Renderer", "mesh": "sphere", "material": "lit-mat"}
+                ]
+            },
+            {
+                "position": [0, 3, 0],
+                "rotation": [0, 0, 0],
+                "components": [
+                    {"type": "Light", "lightType": "spot", "color": [1.0, 0.95, 0.8], "ambient": [0.1, 0.1, 0.1], "innerCutoff": 5.0, "outerCutoff": 10.0}
+                ]
+            },
+            {
+                "rotation": [-45, 45, 0],
+                "components": [
+                    {"type": "Light", "lightType": "directional", "color": [0.3, 0.6, 1.0], "ambient": [0.1, 0.2, 0.3]}
+                ]
+            }
+        ]
+    }
+}
