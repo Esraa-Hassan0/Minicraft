@@ -24,6 +24,9 @@ namespace our {
         void enter(Application* app) {
             this->app = app;
             isFirstUpdate = true;
+            if (app) {
+                app->getMouse().lockMouse(app->getWindow());
+            }
         }
 
         // Update player based on input each frame
@@ -63,7 +66,9 @@ namespace our {
         }
 
         void exit() {
-            // Cleanup
+            if (app) {
+                app->getMouse().unlockMouse(app->getWindow());
+            }
         }
 
     private:
@@ -89,13 +94,6 @@ namespace our {
 
             // Wrap yaw around 0-2π
             rotation.y = glm::wrapAngle(rotation.y);
-
-            // Lock mouse for first-person view
-            if (!isFirstUpdate && app->getMouse().isPressed(GLFW_MOUSE_BUTTON_1)) {
-                app->getMouse().lockMouse(app->getWindow());
-            } else if (!isFirstUpdate && app->getMouse().isPressed(GLFW_MOUSE_BUTTON_2)) {
-                app->getMouse().unlockMouse(app->getWindow());
-            }
 
             isFirstUpdate = false;
         }
