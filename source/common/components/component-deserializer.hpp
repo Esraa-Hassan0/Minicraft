@@ -6,6 +6,8 @@
 #include "mesh-renderer.hpp"
 #include "free-camera-controller.hpp"
 #include "movement.hpp"
+#include "player.hpp"
+#include "aabb-collider.hpp"
 
 namespace our
 {
@@ -33,6 +35,14 @@ namespace our
         else if (type == MeshRendererComponent::getID())
         {
             component = entity->addComponent<MeshRendererComponent>();
+        }
+        else if (type == PlayerComponent::getID())
+        {
+            component = entity->addComponent<PlayerComponent>();
+        }
+        else if (type == AABBColliderComponent::getID())
+        {
+            component = entity->addComponent<AABBColliderComponent>();
         }
         if (component)
             component->deserialize(data);

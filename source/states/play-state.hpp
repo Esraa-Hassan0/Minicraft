@@ -6,6 +6,10 @@
 #include <systems/forward-renderer.hpp>
 #include <systems/free-camera-controller.hpp>
 #include <systems/movement.hpp>
+#include <systems/player-controller.hpp>
+#include <systems/collision-system.hpp>
+#include <systems/block-interaction.hpp>
+//#include <systems/ui-system.hpp>
 #include <asset-loader.hpp>
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
@@ -19,13 +23,17 @@ class Playstate: public our::State {
     our::ForwardRenderer renderer;
     our::FreeCameraControllerSystem cameraController;
     our::MovementSystem movementSystem;
+    our::PlayerControllerSystem playerController;
+    our::CollisionSystem collisionSystem;
+    our::BlockInteractionSystem blockInteraction;
+    //our::UISystem uiSystem;
     std::vector<our::Entity*> terrainEntities;
 
     our::Entity* findPlayerEntity() {
         for (auto entity : engineWorld.getEntities()) {
             auto* camera = entity->getComponent<our::CameraComponent>();
-            auto* controller = entity->getComponent<our::FreeCameraControllerComponent>();
-            if (camera && controller) {
+            auto* player = entity->getComponent<our::PlayerComponent>();
+            if (camera && player) {
                 return entity;
             }
         }
@@ -86,11 +94,28 @@ class Playstate: public our::State {
         terrainWorld.generate();
         // We initialize the camera controller system since it needs a pointer to the app
         cameraController.enter(getApp());
+        // We initialize the player controller system
+        playerController.enter(getApp());
+        // We initialize the block interaction system
+        blockInteraction.enter(getApp());
         // Then we initialize the renderer
         auto size = getApp()->getFrameBufferSize();
         renderer.initialize(size, config["renderer"]);
 
         rebuildMesh();
+
+        our::Entity* playerEntity = findPlayerEntity();
+        if (playerEntity) {
+            auto& pos = playerEntity->localTransform.position;
+            int px = static_cast<int>(std::floor(pos.x));
+            int pz = static_cast<int>(std::floor(pos.z));
+            for (int y = terrainWorld.height - 1; y >= 0; --y) {
+                if (terrainWorld.getBlock(px, y, pz) != 0) { // Air is 0
+                    pos.y = y + 2.5f; // Place character safely above block (1 unit above ground + offset for center)
+                    break;
+                }
+            }
+        }
     }
 
     void onImmediateGui() override {
@@ -113,7 +138,9 @@ class Playstate: public our::State {
     void onDraw(double deltaTime) override {
         // Here, we just run a bunch of systems to control the engineWorld logic
         movementSystem.update(&engineWorld, (float)deltaTime);
-        cameraController.update(&engineWorld, (float)deltaTime);
+        playerController.update(&engineWorld, (float)deltaTime);
+        collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
+        // cameraController.update(&engineWorld, (float)deltaTime);
         // And finally we use the renderer system to draw the scene
         // Get a reference to the keyboard object
         auto& keyboard = getApp()->getKeyboard();
@@ -161,6 +188,10 @@ class Playstate: public our::State {
         renderer.destroy();
         // On exit, we call exit for the camera controller system to make sure that the mouse is unlocked
         cameraController.exit();
+        // On exit, we call exit for the player controller system
+        playerController.exit();
+        // On exit, we call exit for the block interaction system
+        blockInteraction.exit();
         // Clear the engineWorld
         engineWorld.clear();
         terrainEntities.clear();
