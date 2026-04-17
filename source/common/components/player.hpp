@@ -20,9 +20,9 @@ namespace our {
         float damageRecoveryTime = 0.5f; // Cooldown after taking damage
         float timeSinceDamage = 0.0f;
 
-        // // Resources/Inventory system
-        // int resourcesCollected = 0;
-        // int resourcesRequired = 5; // Win condition: collect this many resources
+        // Resources/Inventory system
+        int resourcesCollected = 0;
+        int resourcesRequired = 5; // Win condition: collect this many resources
         
         // Movement & Physics
         glm::vec3 velocity = glm::vec3(0.0f);
