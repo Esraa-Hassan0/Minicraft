@@ -17,5 +17,6 @@ namespace our
 
         mesh = AssetLoader<Mesh>::get(data["mesh"].get<std::string>());             // Read the mesh name from JSON and fetch the actual Mesh asset from the AssetLoader
         material = AssetLoader<Material>::get(data["material"].get<std::string>()); // Read the material name from JSON and fetch the actual Material asset from the AssetLoader
+        enabled = data.value("enabled", true);
     }
 }

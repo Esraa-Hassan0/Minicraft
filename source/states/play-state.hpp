@@ -191,9 +191,23 @@ class Playstate : public our::State
                         light->enabled = isDaytime;
                     else if (entity->name == "nightlight")
                         light->enabled = !isDaytime;
+                    else if (entity->name == "sun")
+                        light->enabled = isDaytime;
+                }
+                /* Toggle mesh renderer for sun visibility */
+                if (auto *meshRenderer = entity->getComponent<our::MeshRendererComponent>())
+                {
+                    if (entity->name == "sun")
+                        meshRenderer->enabled = isDaytime;
                 }
             }
+
+            // Enable fog postprocessing only at night
+            renderer.setFogEnabled(!isDaytime);
         }
+
+        // Set initial fog state based on time of day
+        renderer.setFogEnabled(!isDaytime);
 
         renderer.render(&engineWorld);
         if (keyboard.justPressed(GLFW_KEY_ESCAPE))
