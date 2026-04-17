@@ -1,11 +1,10 @@
 {
     "start-scene": "menu",
-    "window":
-    {
-        "title":"Game",
-        "size":{
-            "width":1280,
-            "height":720
+    "window": {
+        "title": "Game",
+        "size": {
+            "width": 1280,
+            "height": 720
         },
         "fullscreen": false
     },
@@ -17,68 +16,134 @@
             "waterLevel": 5,
             "stoneLevel": 4
         },
-        "renderer":{
-             "sky": "assets/textures/sky.png",
+        "renderer": {
+            "sky": "assets/textures/sky.png",
             "postprocess": "assets/shaders/postprocess/vignette.frag"
         },
-        "assets":{
-            "shaders":{
-                "tinted":{
-                    "vs":"assets/shaders/tinted.vert",
-                    "fs":"assets/shaders/tinted.frag"
+        "assets": {
+            "shaders": {
+                "tinted": {
+                    "vs": "assets/shaders/tinted.vert",
+                    "fs": "assets/shaders/tinted.frag"
                 },
-                "textured":{
-                    "vs":"assets/shaders/textured.vert",
-                    "fs":"assets/shaders/textured.frag"
+                "textured": {
+                    "vs": "assets/shaders/textured.vert",
+                    "fs": "assets/shaders/textured.frag"
+                },
+                "lit": {
+                    "vs": "assets/shaders/lit.vert",
+                    "fs": "assets/shaders/lit.frag"
                 }
             },
-            "textures":{
+            "textures": {
                 "moon": "assets/textures/moon.jpg",
                 "grass": "assets/textures/default_grass.png",
                 "wood": "assets/textures/wood.jpg",
                 "glass": "assets/textures/glass-panels.png",
                 "monkey": "assets/textures/monkey.png"
             },
-            "meshes":{
+            "meshes": {
                 "cube": "assets/models/cube.obj",
                 "monkey": "assets/models/monkey.obj",
                 "plane": "assets/models/plane.obj",
                 "sphere": "assets/models/sphere.obj"
             },
-            "samplers":{
-                "default":{},
-                "pixelated":{
+            "samplers": {
+                "default": {},
+                "pixelated": {
                     "MAG_FILTER": "GL_NEAREST",
                     "MIN_FILTER": "GL_NEAREST",
                     "WRAP_S": "GL_REPEAT",
                     "WRAP_T": "GL_REPEAT"
                 }
             },
-            "materials":{
-                "metal":{
+            "materials": {
+                "metal": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling":{
+                        "faceCulling": {
                             "enabled": false
                         },
-                        "depthTesting":{
+                        "depthTesting": {
                             "enabled": true
                         }
                     },
-                    "tint": [0.45, 0.4, 0.5, 1]
+                    "tint": [
+                        0.45,
+                        0.4,
+                        0.5,
+                        1
+                    ]
                 },
-                "glass":{
+                "lit-red": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1,
+                        0.3,
+                        0.3,
+                        1
+                    ],
+                    "shininess": 32.0
+                },
+                "lit-blue": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        0.3,
+                        0.3,
+                        1.0,
+                        1
+                    ],
+                    "shininess": 64.0
+                },
+                "lit-gold": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1.0,
+                        0.84,
+                        0.0,
+                        1
+                    ],
+                    "shininess": 128.0
+                },
+                "glass": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling":{
+                        "faceCulling": {
                             "enabled": false
                         },
-                        "depthTesting":{
+                        "depthTesting": {
                             "enabled": true
                         },
-                        "blending":{
+                        "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
                             "destinationFactor": "GL_ONE_MINUS_SRC_ALPHA"
@@ -86,52 +151,72 @@
                         "depthMask": false
                     },
                     "transparent": true,
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "glass",
                     "sampler": "pixelated"
                 },
-                "grass":{
+                "grass": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling":{
+                        "faceCulling": {
                             "enabled": false
                         },
-                        "depthTesting":{
+                        "depthTesting": {
                             "enabled": true
                         }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "grass",
                     "sampler": "pixelated"
                 },
-                "monkey":{
+                "monkey": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling":{
+                        "faceCulling": {
                             "enabled": false
                         },
-                        "depthTesting":{
+                        "depthTesting": {
                             "enabled": true
                         }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "monkey",
                     "sampler": "default"
                 },
-                "moon":{
+                "moon": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling":{
+                        "faceCulling": {
                             "enabled": false
                         },
-                        "depthTesting":{
+                        "depthTesting": {
                             "enabled": true
                         }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "moon",
                     "sampler": "default"
                 },
@@ -139,26 +224,48 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 0.0, 1.0, 1.0]
+                    "tint": [
+                        1.0,
+                        0.0,
+                        1.0,
+                        1.0
+                    ]
                 },
                 "stone": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [0.5, 0.5, 0.5, 1.0] 
+                    "tint": [
+                        0.5,
+                        0.5,
+                        0.5,
+                        1.0
+                    ]
                 },
                 "water": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true },
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        },
                         "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
@@ -166,23 +273,163 @@
                         }
                     },
                     "transparent": true,
-                    "tint": [0.2, 0.4, 0.9, 0.8]
+                    "tint": [
+                        0.2,
+                        0.4,
+                        0.9,
+                        0.8
+                    ]
                 },
                 "sand": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [0.8, 0.8, 0.2, 1.0]
+                    "tint": [
+                        0.8,
+                        0.8,
+                        0.2,
+                        1.0
+                    ]
+                },
+                "sun-material": {
+                    "type": "tinted",
+                    "shader": "tinted",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1.0,
+                        1.0,
+                        0.8,
+                        1.0
+                    ]
                 }
             }
         },
         "world": [
             {
-                "position": [8, 20, 25],
-                "rotation": [-45, 0, 0],
+                "position": [
+                    0,
+                    0,
+                    0
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ],
+                "name": "daylight",
+                "components": [
+                    {
+                        "type": "Light",
+                        "lightType": "directional",
+                        "color": [
+                            0.95,
+                            0.98,
+                            1.0
+                        ],
+                        "ambient": [
+                            1.0,
+                            0.9,
+                            0.8
+                        ],
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "position": [
+                    0,
+                    0,
+                    0
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ],
+                "name": "nightlight",
+                "components": [
+                    {
+                        "type": "Light",
+                        "lightType": "directional",
+                        "color": [
+                            0.05,
+                            0.05,
+                            0.2
+                        ],
+                        "ambient": [
+                            0.01,
+                            0.01,
+                            0.03
+                        ],
+                        "enabled": false
+                    }
+                ]
+            },
+            {
+                "position": [
+                    0,
+                    50,
+                    -50
+                ],
+                "scale": [
+                    2.0,
+                    2.0,
+                    2.0
+                ],
+                "name": "sun",
+                "components": [
+                    {
+                        "type": "Mesh Renderer",
+                        "mesh": "cube",
+                        "material": "sun-material"
+                    },
+                    {
+                        "type": "Light",
+                        "lightType": "point",
+                        "color": [
+                            1.0,
+                            0.95,
+                            0.8
+                        ],
+                        "ambient": [
+                            0.6,
+                            0.6,
+                            0.5
+                        ],
+                        "attenuation": [
+                            1.0,
+                            0.02,
+                            0.001
+                        ],
+                        "enabled": true
+                    }
+                ]
+            },
+            {
+                "position": [
+                    8,
+                    20,
+                    25
+                ],
+                "rotation": [
+                    -45,
+                    0,
+                    0
+                ],
                 "components": [
                     {
                         "type": "Camera"

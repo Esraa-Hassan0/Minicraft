@@ -44,8 +44,13 @@ namespace our
         {
             component = entity->addComponent<AABBColliderComponent>();
         }
+        else if (type == LightComponent::getID())
+        {
+            component = entity->addComponent<LightComponent>();
+        }
         if (component)
             component->deserialize(data);
     }
+
 
 }

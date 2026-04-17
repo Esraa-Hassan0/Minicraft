@@ -1,0 +1,49 @@
+{
+    "start-scene": "renderer-test",
+    "window": {
+        "title": "Point Light Test",
+        "size": {"width": 512, "height": 512},
+        "fullscreen": false
+    },
+    "screenshots": {
+        "directory": "screenshots/lighting",
+        "requests": [{"file": "point.png", "frame": 1}]
+    },
+    "scene": {
+        "renderer": {"sky": "assets/textures/sky.jpg"},
+        "assets": {
+            "shaders": {
+                "lit": {"vs": "assets/shaders/lit.vert", "fs": "assets/shaders/lit.frag"}
+            },
+            "meshes": {"sphere": "assets/models/sphere.obj"},
+            "samplers": {"default": {}},
+            "materials": {
+                "lit-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {"faceCulling": {"enabled": false}, "depthTesting": {"enabled": true}},
+                    "tint": [0.8, 0.5, 0.5, 1],
+                    "shininess": 32.0
+                }
+            }
+        },
+        "world": [
+            {
+                "position": [0, 0, 8],
+                "components": [{"type": "Camera"}]
+            },
+            {
+                "position": [0, 0, 0],
+                "components": [
+                    {"type": "Mesh Renderer", "mesh": "sphere", "material": "lit-mat"}
+                ]
+            },
+            {
+                "position": [2, 2, 2],
+                "components": [
+                    {"type": "Light", "lightType": "point", "color": [1.0, 0.5, 0.2], "ambient": [0.05, 0.05, 0.05], "attenLinear": 0.14, "attenQuadratic": 0.07}
+                ]
+            }
+        ]
+    }
+}

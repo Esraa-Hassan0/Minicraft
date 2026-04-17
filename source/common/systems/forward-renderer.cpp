@@ -1,6 +1,7 @@
 #include "forward-renderer.hpp"
 #include "../mesh/mesh-utils.hpp"
 #include "../texture/texture-utils.hpp"
+#include "../material/material.hpp"
 
 namespace our
 {
@@ -16,10 +17,10 @@ namespace our
             // First, we create a sphere which will be used to draw the sky
             this->skySphere = mesh_utils::sphere(glm::ivec2(16, 16));
 
-            // We can draw the sky using the same shader used to draw textured objects
+            // We can draw the sky using the lit shader instead of textured
             ShaderProgram *skyShader = new ShaderProgram();
-            skyShader->attach("assets/shaders/textured.vert", GL_VERTEX_SHADER);
-            skyShader->attach("assets/shaders/textured.frag", GL_FRAGMENT_SHADER);
+            skyShader->attach("assets/shaders/lit.vert", GL_VERTEX_SHADER);
+            skyShader->attach("assets/shaders/lit.frag", GL_FRAGMENT_SHADER);
             skyShader->link();
 
             // TODO: (Req 10) Pick the correct pipeline state to draw the sky
@@ -28,10 +29,7 @@ namespace our
             PipelineState skyPipelineState{};
             skyPipelineState.depthTesting.enabled = true;
             skyPipelineState.depthTesting.function = GL_LEQUAL;
-            // Use LEQUAL so the sky passes depth test even when depth = 1 (far plane),
-            // ensuring it appears behind all geometry
             skyPipelineState.faceCulling.enabled = true;
-            // We are inside the sphere, so we want to see the inner faces → cull front faces
             skyPipelineState.faceCulling.culledFace = GL_FRONT;
 
             // Load the sky texture (note that we don't need mipmaps since we want to avoid any unnecessary blurring while rendering the sky)
@@ -46,12 +44,14 @@ namespace our
             skySampler->set(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
             // Combine all the aforementioned objects (except the mesh) into a material
-            this->skyMaterial = new TexturedMaterial();
+            LitMaterial* litSkyMat = new LitMaterial();
+            litSkyMat->shininess = 256.0f; // making it shiny
+            this->skyMaterial = litSkyMat;
             this->skyMaterial->shader = skyShader;
             this->skyMaterial->texture = skyTexture;
             this->skyMaterial->sampler = skySampler;
             this->skyMaterial->pipelineState = skyPipelineState;
-            this->skyMaterial->tint = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+            this->skyMaterial->tint = glm::vec4(0.3f, 0.6f, 1.0f, 1.0f); // making it blue-like
             this->skyMaterial->alphaThreshold = 1.0f;
             this->skyMaterial->transparent = false;
         }
@@ -62,14 +62,12 @@ namespace our
             // TODO: (Req 11) Create a framebuffer
             glGenFramebuffers(1, &postprocessFrameBuffer);
             glBindFramebuffer(GL_FRAMEBUFFER, postprocessFrameBuffer);
-            // Create a custom framebuffer to render the scene off-screen for postprocessing
 
             // TODO: (Req 11) Create a color and a depth texture and attach them to the framebuffer
             //  Hints: The color format can be (Red, Green, Blue and Alpha components with 8 bits for each channel).
             //  The depth format can be (Depth component with 24 bits).
-            colorTarget = texture_utils::empty(GL_RGBA8, windowSize);             //  Color buffer: stores rendered image (RGBA, 8 bits per channel)
-            depthTarget = texture_utils::empty(GL_DEPTH_COMPONENT24, windowSize); // Depth buffer: stores depth values (24-bit precision)
-            // Attach textures to framebuffer so rendering writes into them instead of the screen
+            colorTarget = texture_utils::empty(GL_RGBA8, windowSize);
+            depthTarget = texture_utils::empty(GL_DEPTH_COMPONENT24, windowSize);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTarget->getOpenGLName(), 0);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTarget->getOpenGLName(), 0);
 
@@ -132,44 +130,107 @@ namespace our
 
     void ForwardRenderer::render(World *world)
     {
-        // First of all, we search for a camera and for all the mesh renderers
+        // PHASE 1: Collect all renderable components from the ECS world.
+        // We iterate through all entities looking for:
+        //   - CameraComponent: required for rendering (provides view/projection)
+        //   - MeshRendererComponent: defines geometry to draw
+        //   - LightComponent: defines lights affecting lit materials
+
         CameraComponent *camera = nullptr;
         opaqueCommands.clear();
         transparentCommands.clear();
+        lights.clear();
+
         for (auto entity : world->getEntities())
         {
-            // If we hadn't found a camera yet, we look for a camera in this entity
+            // Find the first camera in the world (needed for rendering)
             if (!camera)
                 camera = entity->getComponent<CameraComponent>();
-            // If this entity has a mesh renderer component
+
+            // Collect mesh renderer components into render commands
             if (auto meshRenderer = entity->getComponent<MeshRendererComponent>(); meshRenderer)
             {
-                // We construct a command from it
                 RenderCommand command;
                 command.localToWorld = meshRenderer->getOwner()->getLocalToWorldMatrix();
                 command.center = glm::vec3(command.localToWorld * glm::vec4(0, 0, 0, 1));
                 command.mesh = meshRenderer->mesh;
                 command.material = meshRenderer->material;
-                // if it is transparent, we add it to the transparent commands list
+
+                // Separate transparent and opaque objects for proper blending.
+                // Transparent objects drawn back-to-front, opaque drawn in any order.
                 if (command.material->transparent)
                 {
                     transparentCommands.push_back(command);
                 }
                 else
                 {
-                    // Otherwise, we add it to the opaque command list
                     opaqueCommands.push_back(command);
                 }
             }
+
+            // Collect lights into light data array
+            // Each LightComponent becomes a LightData sent to lit shaders each frame
+            if (auto *lc = entity->getComponent<LightComponent>())
+            {
+                if (!lc->enabled) continue;
+                LightData ld;
+                ld.type = (int)lc->type;
+
+                // Get world position from entity's transform matrix
+                glm::mat4 ltw = entity->getLocalToWorldMatrix();
+                ld.position = glm::vec3(ltw * glm::vec4(0, 0, 0, 1));
+
+                // Direction: default down (-Y) transformed by entity rotation
+                ld.direction = glm::normalize(glm::vec3(ltw * glm::vec4(0, -1, 0, 0)));
+
+                // Copy light properties
+                ld.color = lc->color;
+                ld.ambient = lc->ambient;
+                ld.attenConstant = lc->attenConstant;
+                ld.attenLinear = lc->attenLinear;
+                ld.attenQuadratic = lc->attenQuadratic;
+
+                // Convert angles to cosines for shader (avoids runtime trig)
+                ld.innerCutoff = glm::cos(glm::radians(lc->innerCutoffDeg));
+                ld.outerCutoff = glm::cos(glm::radians(lc->outerCutoffDeg));
+
+                lights.push_back(ld);
+            }
         }
 
-        // If there is no camera, we return (we cannot render without a camera)
+        // Cannot render without a camera
         if (camera == nullptr)
             return;
 
+        // PHASE 2: Upload lights to shaders
+        // Lambda that sends light array to a shader program.
+        // Called for each LitMaterial draw call.
+        // Note: MAX_LIGHTS is 8 in shader, so we clamp the count.
+        auto uploadLights = [&](ShaderProgram *sh, const glm::vec3 &cameraPos)
+        {
+            int n = (int)std::min(lights.size(), (size_t)8);
+            sh->set("numLights", n);
+            sh->set("cameraPos", cameraPos);
+            for (int i = 0; i < n; i++)
+            {
+                // Build uniform name: "lights[0].type", "lights[0].position", etc.
+                std::string b = "lights[" + std::to_string(i) + "].";
+                sh->set(b + "type", lights[i].type);
+                sh->set(b + "position", lights[i].position);
+                sh->set(b + "direction", lights[i].direction);
+                sh->set(b + "color", lights[i].color);
+                sh->set(b + "ambient", lights[i].ambient);
+                sh->set(b + "attenConstant", lights[i].attenConstant);
+                sh->set(b + "attenLinear", lights[i].attenLinear);
+                sh->set(b + "attenQuadratic", lights[i].attenQuadratic);
+                sh->set(b + "innerCutoff", lights[i].innerCutoff);
+                sh->set(b + "outerCutoff", lights[i].outerCutoff);
+            }
+        };
+
         // TODO: (Req 9) Modify the following line such that "cameraForward" contains a vector pointing the camera forward direction
         //  HINT: See how you wrote the CameraComponent::getViewMatrix, it should help you solve this one
-        glm::vec3 cameraForward = camera->getOwner()->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f); // Transform the forward direction (0,0,-1) from local space to world space
+        glm::vec3 cameraForward = camera->getOwner()->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
         std::sort(transparentCommands.begin(), transparentCommands.end(), [cameraForward](const RenderCommand &first, const RenderCommand &second)
                   {
             //TODO: (Req 9) Finish this function
@@ -177,7 +238,7 @@ namespace our
             return glm::dot(cameraForward, first.center) > glm::dot(cameraForward, second.center); });
 
         // TODO: (Req 9) Get the camera ViewProjection matrix and store it in VP
-        glm::mat4 VP = camera->getProjectionMatrix(windowSize) * camera->getViewMatrix(); // Combine projection and view to transform world → clip space
+        glm::mat4 VP = camera->getProjectionMatrix(windowSize) * camera->getViewMatrix();
 
         // TODO: (Req 9) Set the OpenGL viewport using viewportStart and viewportSize
         glViewport(0, 0, windowSize.x, windowSize.y);
@@ -187,53 +248,134 @@ namespace our
         glClearDepth(1.0f);
 
         // TODO: (Req 9) Set the color mask to true and the depth mask to true (to ensure the glClear will affect the framebuffer)
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); // Enable writing to color and depth buffers
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glDepthMask(GL_TRUE);
 
         // If there is a postprocess material, bind the framebuffer
         if (postprocessMaterial)
         {
             // TODO: (Req 11) bind the framebuffer
-            glBindFramebuffer(GL_FRAMEBUFFER, postprocessFrameBuffer); // Render scene into texture instead of directly to screen
+            glBindFramebuffer(GL_FRAMEBUFFER, postprocessFrameBuffer);
         }
 
         // TODO: (Req 9) Clear the color and depth buffers
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear framebuffer before drawing new frame
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // TODO: (Req 9) Draw all the opaque commands
-        //  Don't forget to set the "transform" uniform to be equal the model-view-projection matrix for each render command
+        // Get camera world position for view direction in lighting calculations
+        glm::vec3 cameraPosition = camera->getOwner()->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+        // PHASE 3: Draw opaque objects
+        // For each render command, we set up uniforms based on material type.
+        // LitMaterial gets extra lighting uniforms (transform, model, normalMatrix, lights).
         for (auto &command : opaqueCommands)
         {
-            command.material->setup();                                             // Bind shader, textures, and pipeline state
-            command.material->shader->set("transform", VP * command.localToWorld); // Send MVP matrix to shader
-            command.mesh->draw();                                                  // Issue draw call
+            command.material->setup();
+            auto *sh = command.material->shader;
+            sh->set("transform", VP * command.localToWorld);
+
+            // If using LitMaterial, also upload lighting data:
+            // - model matrix: transforms vertex to world space
+            // - normalMatrix: transforms normals to world space (inverse-transpose)
+            // - lights array: all lights in scene
+            if (dynamic_cast<LitMaterial *>(command.material))
+            {
+                sh->set("model", command.localToWorld);
+                sh->set("normalMatrix", glm::mat3(glm::transpose(glm::inverse(command.localToWorld))));
+                uploadLights(sh, cameraPosition);
+
+                // Damage flash effect - check if any light has active flash timer
+                // Iterate entities to find lights with active flash
+                float maxFlashStrength = 0.0f;
+                glm::vec3 activeFlashColor = glm::vec3(1.0f, 0.0f, 0.0f);
+                for (auto entity : world->getEntities())
+                {
+                    if (auto *lc = entity->getComponent<LightComponent>())
+                    {
+                        if (lc->flashTimer > 0.0f)
+                        {
+                            float strength = std::min(lc->flashTimer, 1.0f);
+                            if (strength > maxFlashStrength)
+                            {
+                                maxFlashStrength = strength;
+                                activeFlashColor = lc->flashColor;
+                            }
+                        }
+                    }
+                }
+                sh->set("flashStrength", maxFlashStrength);
+                sh->set("flashColor", activeFlashColor);
+            }
+
+            command.mesh->draw();
         }
         // If there is a sky material, draw the sky
         if (this->skyMaterial)
         {
             // TODO: (Req 10) setup the sky material
-            this->skyMaterial->setup(); // Activate sky shader and pipeline state
+            this->skyMaterial->setup();
             // TODO: (Req 10) Get the camera position
-            glm::vec3 cameraPosition = camera->getOwner()->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // Extract camera world position
             // TODO: (Req 10) Create a model matrix for the sy such that it always follows the camera (sky sphere center = camera position)
-            glm::mat4 skyModel = glm::translate(glm::mat4(1.0f), cameraPosition); // Move sky sphere to camera position so it always surrounds the viewer
+            glm::mat4 skyModel = glm::translate(glm::mat4(1.0f), cameraPosition);
             // TODO: (Req 10) We want the sky to be drawn behind everything (in NDC space, z=1)
             //  We can achieve this by forcing clip-space z to equal clip-space w.
             glm::mat4 alwaysBehindTransform = glm::mat4(1.0f);
             alwaysBehindTransform[2][2] = 0.0f;
             alwaysBehindTransform[3][2] = 1.0f;
-            // Force depth to far plane (z = w) so sky is always rendered behind everything
             // TODO: (Req 10) set the "transform" uniform
-            this->skyMaterial->shader->set("transform", alwaysBehindTransform * VP * skyModel); // Apply modified MVP
+            this->skyMaterial->shader->set("transform", alwaysBehindTransform * VP * skyModel);
+            
+            if (auto* litSky = dynamic_cast<LitMaterial*>(this->skyMaterial)) {
+                auto* sh = litSky->shader;
+                sh->set("model", skyModel);
+                sh->set("normalMatrix", glm::mat3(glm::transpose(glm::inverse(skyModel))));
+                uploadLights(sh, cameraPosition);
+                
+                // Disable damage flash entirely for the sky
+                sh->set("flashStrength", 0.0f); 
+                sh->set("flashColor", glm::vec3(0.0f));
+            }
+
             // TODO: (Req 10) draw the sky sphere
-            this->skySphere->draw(); // Render sky geometry
+            this->skySphere->draw();
         }
-        // TODO: (Req 9) Draw all the transparent commands
-        //  Don't forget to set the "transform" uniform to be equal the model-view-projection matrix for each render command
+        // PHASE 4: Draw transparent objects
+        // Transparent objects are drawn after opaque with back-to-front sorting
+        // (handled by std::sort earlier using camera distance)
         for (auto &command : transparentCommands)
         {
             command.material->setup();
-            command.material->shader->set("transform", VP * command.localToWorld);
+            auto *sh = command.material->shader;
+            sh->set("transform", VP * command.localToWorld);
+
+            // Same LitMaterial handling as opaque objects
+            if (dynamic_cast<LitMaterial *>(command.material))
+            {
+                sh->set("model", command.localToWorld);
+                sh->set("normalMatrix", glm::mat3(glm::transpose(glm::inverse(command.localToWorld))));
+                uploadLights(sh, cameraPosition);
+
+                // Damage flash effect for transparent objects
+                float maxFlashStrength = 0.0f;
+                glm::vec3 activeFlashColor = glm::vec3(1.0f, 0.0f, 0.0f);
+                for (auto entity : world->getEntities())
+                {
+                    if (auto *lc = entity->getComponent<LightComponent>())
+                    {
+                        if (lc->flashTimer > 0.0f)
+                        {
+                            float strength = std::min(lc->flashTimer, 1.0f);
+                            if (strength > maxFlashStrength)
+                            {
+                                maxFlashStrength = strength;
+                                activeFlashColor = lc->flashColor;
+                            }
+                        }
+                    }
+                }
+                sh->set("flashStrength", maxFlashStrength);
+                sh->set("flashColor", activeFlashColor);
+            }
+
             command.mesh->draw();
         }
 
@@ -241,12 +383,12 @@ namespace our
         if (postprocessMaterial)
         {
             // TODO: (Req 11) Return to the default framebuffer
-            glBindFramebuffer(GL_FRAMEBUFFER, 0); // Return to default framebuffer (screen)
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             // TODO: (Req 11) Setup the postprocess material and draw the fullscreen triangle
-            postprocessMaterial->setup();              // Bind postprocess shader and scene texture
-            glBindVertexArray(postProcessVertexArray); // Bind fullscreen triangle VAO
-            glDrawArrays(GL_TRIANGLES, 0, 3);          // Draw fullscreen triangle → applies postprocess shader to entire screen
+            postprocessMaterial->setup();
+            glBindVertexArray(postProcessVertexArray);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
         }
     }
 

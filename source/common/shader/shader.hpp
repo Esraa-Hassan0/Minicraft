@@ -76,6 +76,11 @@ namespace our {
             glUniformMatrix4fv(getUniformLocation(uniform), 1, GL_FALSE, glm::value_ptr(matrix));
         }
 
+        void set(const std::string &uniform, glm::mat3 matrix) {
+            // Send the given matrix 3x3 value to the given uniform
+            glUniformMatrix3fv(getUniformLocation(uniform), 1, GL_FALSE, glm::value_ptr(matrix));
+        }
+
         //TODO: (Req 1) Delete the copy constructor and assignment operator.
         //Question: Why do we delete the copy constructor and assignment operator?
         // to prevent multiple objects from managing the same OpenGL resource, which would cause double deletion and crashes.

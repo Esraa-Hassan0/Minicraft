@@ -3,6 +3,7 @@
 #include "../ecs/world.hpp"
 #include "../components/camera.hpp"
 #include "../components/mesh-renderer.hpp"
+#include "../components/light.hpp"
 #include "../asset-loader.hpp"
 
 #include <glad/gl.h>
@@ -22,6 +23,22 @@ namespace our
         Material* material;
     };
 
+    // Light data structure for passing to shaders each frame.
+    // Mirrors the Light struct in lit.frag shader.
+    // Filled from LightComponent each frame in ForwardRenderer::render().
+    struct LightData {
+        int type;              // 0=directional, 1=point, 2=spot
+        glm::vec3 position;    // World position (point/spot lights)
+        glm::vec3 direction;  // Direction vector (directional/spot axis)
+        glm::vec3 color;       // Light diffuse/specular color
+        glm::vec3 ambient;     // Ambient contribution
+        float attenConstant;   // Attenuation constant term
+        float attenLinear;     // Attenuation linear term
+        float attenQuadratic;  // Attenuation quadratic term
+        float innerCutoff;     // Cosine of inner spot angle
+        float outerCutoff;      // Cosine of outer spot angle
+    };
+
     // A forward renderer is a renderer that draw the object final color directly to the framebuffer
     // In other words, the fragment shader in the material should output the color that we should see on the screen
     // This is different from more complex renderers that could draw intermediate data to a framebuffer before computing the final color
@@ -33,6 +50,7 @@ namespace our
         // We define them here (instead of being local to the "render" function) as an optimization to prevent reallocating them every frame
         std::vector<RenderCommand> opaqueCommands;
         std::vector<RenderCommand> transparentCommands;
+        std::vector<LightData> lights;
         // Objects used for rendering a skybox
         Mesh* skySphere;
         TexturedMaterial* skyMaterial;
