@@ -18,6 +18,7 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <audio/audio.hpp>
 
 
 struct MenuButton {
@@ -191,7 +192,10 @@ class Menustate: public our::State {
 
         //  Button layout 
         buttons[0].label  = "PLAY GAME";
-        buttons[0].action = [this](){ getApp()->changeState("play"); };
+        buttons[0].action = [this](){ 
+            our::AudioSystem::playSound("assets/sounds/uiBotton.wav");
+            getApp()->changeState("play"); 
+        };
 
         buttons[1].label  = "EXIT";
         buttons[1].action = [this](){ getApp()->close(); };
@@ -216,10 +220,13 @@ class Menustate: public our::State {
 
         //  Keyboard shortcuts 
         auto& kb = app.getKeyboard();
-        if (kb.justPressed(GLFW_KEY_SPACE) || kb.justPressed(GLFW_KEY_ENTER))
+        if (kb.justPressed(GLFW_KEY_SPACE) || kb.justPressed(GLFW_KEY_ENTER)) {
+            our::AudioSystem::playSound("assets/sounds/uiBotton.wav");
             app.changeState("play");
-        else if (kb.justPressed(GLFW_KEY_ESCAPE))
+        }
+        else if (kb.justPressed(GLFW_KEY_ESCAPE)) {
             app.close();
+        }
 
         //  Mouse 
         auto& mouse = app.getMouse();

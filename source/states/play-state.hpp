@@ -13,6 +13,7 @@
 #include <asset-loader.hpp>
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
+#include <audio/audio.hpp>
 #include <vector>
 
 // This state shows how to use the ECS framework and deserialization.
@@ -159,6 +160,19 @@ class Playstate: public our::State {
         if (playerEntity && mouse.justPressed(0)) { // 0 is usually left click
             voxel::RayHit hit = terrainWorld.castRay(cameraPos, cameraDir);
              if (hit.hit) {
+                int blockType = terrainWorld.getBlock(hit.x, hit.y, hit.z);
+                if (blockType == voxel::GRASS || blockType == voxel::DIRT) {
+                    our::AudioSystem::playSound("assets/sounds/Grass.wav");
+                } else if (blockType == voxel::STONE || blockType == voxel::Diamond || blockType == voxel::Glass) {
+                    our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                } else if (blockType == voxel::WOOD || blockType == voxel::LEAF) {
+                    our::AudioSystem::playSound("assets/sounds/Wood.wav");
+                } else if (blockType == voxel::SAND) {
+                    our::AudioSystem::playSound("assets/sounds/Clay.wav");
+                } else {
+                    our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                }
+
                 terrainWorld.breakBlock(hit);
 
                 rebuildMesh(); 

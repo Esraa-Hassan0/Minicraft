@@ -5,6 +5,7 @@
 #include "../components/aabb-collider.hpp"
 #include "../components/camera.hpp"
 #include "../application.hpp"
+#include "../audio/audio.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -155,6 +156,7 @@ namespace our {
             if (keyboard.justPressed(GLFW_KEY_SPACE) && player->isGrounded) {
                 player->velocity.y = player->jumpForce;
                 player->isGrounded = false;
+                our::AudioSystem::playSound("assets/sounds/jump.wav");
             }
         }
     };
