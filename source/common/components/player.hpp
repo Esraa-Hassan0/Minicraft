@@ -1,0 +1,60 @@
+#pragma once
+#include "../ecs/component.hpp"
+#include <string>
+#include <glm/glm.hpp>
+
+namespace our {
+    // current game session
+    enum class GameState {
+        PLAYING,
+        WIN,
+        LOSE
+    };
+
+    class PlayerComponent : public Component {
+    public:
+        // Health system
+        float maxHealth = 100.0f;
+        float health = 100.0f;
+        bool isAlive = true;
+        float damageRecoveryTime = 0.5f; // Cooldown after taking damage
+        float timeSinceDamage = 0.0f;
+
+        // // Resources/Inventory system
+        // int resourcesCollected = 0;
+        // int resourcesRequired = 5; // Win condition: collect this many resources
+        
+        // Movement & Physics
+        glm::vec3 velocity = glm::vec3(0.0f);
+        float speed = 5.0f; // Movement speed in units/second
+        float jumpForce = 10.0f; // Initial vertical velocity when jumping
+        float gravityAcceleration = 20.0f; // Gravity acceleration
+        bool isGrounded = false;
+        
+        // Interaction system
+        float interactionRange = 5.0f; // How far the player can mine/place blocks
+        int blockPlacementCooldown = 150; // Milliseconds between block placements
+        int timeSinceLastPlacement = 0;
+
+        // Game outcome
+        GameState gameState = GameState::PLAYING;
+
+        static std::string getID() { return "PlayerComponent"; }
+        
+        void deserialize(const nlohmann::json& data) override {
+            if (!data.is_object()) return;
+            
+            maxHealth = data.value("maxHealth", maxHealth);
+            health = data.value("health", maxHealth);
+            
+            resourcesRequired = data.value("resourcesRequired", resourcesRequired);
+            
+            speed = data.value("speed", speed);
+            jumpForce = data.value("jumpForce", jumpForce);
+            gravityAcceleration = data.value("gravityAcceleration", gravityAcceleration);
+            
+            interactionRange = data.value("interactionRange", interactionRange);
+            blockPlacementCooldown = data.value("blockPlacementCooldown", blockPlacementCooldown);
+        }
+    };
+}
