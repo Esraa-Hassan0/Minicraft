@@ -8,6 +8,7 @@
 #include "movement.hpp"
 #include "player.hpp"
 #include "aabb-collider.hpp"
+#include "light.hpp"
 
 namespace our
 {
