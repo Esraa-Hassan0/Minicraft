@@ -94,6 +94,9 @@ set(COMMON_SOURCES
         source/common/systems/forward-renderer.cpp
         source/common/systems/free-camera-controller.hpp
         source/common/systems/movement.hpp
+
+        source/common/audio/audio.hpp
+        source/common/audio/audio.cpp
 )
 
 # Define the directories in which to search for the included headers
@@ -104,6 +107,7 @@ include_directories(
         vendor/glm
         vendor/imgui
         vendor/utils
+        vendor/miniaudio
 )
 
 
@@ -134,4 +138,6 @@ target_link_libraries(GAME_APPLICATION glfw)
 if(UNIX AND NOT APPLE)
         target_link_libraries(GAME_APPLICATION OpenGL::GL)
         target_link_libraries(GAME_APPLICATION GLEW::GLEW)
+        find_package(Threads REQUIRED)
+        target_link_libraries(GAME_APPLICATION Threads::Threads dl m)
 endif()

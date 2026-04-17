@@ -1,41 +1,26 @@
 #pragma once
 
-// ComponentDeserializer provides a factory function for creating
-// ECS components from JSON configuration. This enables entities
-// to be defined in JSON scene files (e.g., config/*.jsonc).
-
 #include <iostream>
 #include "../ecs/entity.hpp"
 #include "camera.hpp"
 #include "mesh-renderer.hpp"
 #include "free-camera-controller.hpp"
 #include "movement.hpp"
+#include "player.hpp"
+#include "aabb-collider.hpp"
 #include "light.hpp"
 
 namespace our
 {
 
-    // Factory function that creates the appropriate ECS component
-    // based on the "type" field in the JSON data.
-    //
-    // Supported component types in JSON:
-    //   - "Camera": CameraComponent for viewpoint
-    //   - "MeshRenderer": MeshRendererComponent for renderable geometry
-    //   - "FreeCameraController": FreeCameraControllerComponent for input-driven camera movement
-    //   - "Movement": MovementComponent for entity movement/animation
-    //   - "Light": LightComponent for scene lighting
-    //
-    // After creating the component, deserialize() is called to parse
-    // type-specific properties from the JSON.
+    // Given a json object, this function picks and creates a component in the given entity
+    // based on the "type" specified in the json object which is later deserialized from the rest of the json object
     inline void deserializeComponent(const nlohmann::json &data, Entity *entity)
     {
         std::string type = data.value("type", "");
         std::cout << "Loading component: '" << type << "'\n";
-
         Component *component = nullptr;
-
-        // Factory: instantiate the correct component type
-        // Each component class provides getID() returning its type string
+        // TODO: (Req 8) Add an option to deserialize a "MeshRendererComponent" to the following if-else statement
         if (type == CameraComponent::getID())
         {
             component = entity->addComponent<CameraComponent>();
@@ -52,15 +37,21 @@ namespace our
         {
             component = entity->addComponent<MeshRendererComponent>();
         }
+        else if (type == PlayerComponent::getID())
+        {
+            component = entity->addComponent<PlayerComponent>();
+        }
+        else if (type == AABBColliderComponent::getID())
+        {
+            component = entity->addComponent<AABBColliderComponent>();
+        }
         else if (type == LightComponent::getID())
         {
             component = entity->addComponent<LightComponent>();
         }
-
-        // Parse component-specific properties from JSON
-        // Each component knows how to deserialize its own fields
         if (component)
             component->deserialize(data);
     }
+
 
 }

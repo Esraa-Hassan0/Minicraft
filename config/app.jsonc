@@ -435,7 +435,12 @@
                         "type": "Camera"
                     },
                     {
-                        "type": "Free Camera Controller"
+                        "type": "PlayerComponent"
+                    },
+                    {
+                        "type": "AABBCollider",
+                        "halfSize": [0.3, 0.9, 0.3],
+                        "center": [0, -0.9, 0]
                     }
                 ]
             }

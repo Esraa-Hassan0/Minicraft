@@ -23,6 +23,7 @@
 #endif
 
 #include "texture/screenshot.hpp"
+#include "audio/audio.hpp"
 
 std::string default_screenshot_filepath()
 {
@@ -252,6 +253,8 @@ int our::Application::run(int run_for_frames)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
+    our::AudioSystem::initialize();
+
     // This part of the code extracts the list of requested screenshots and puts them into a priority queue
     using ScreenshotRequest = std::pair<int, std::string>;
     std::priority_queue<
@@ -406,6 +409,8 @@ int our::Application::run(int run_for_frames)
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    our::AudioSystem::destroy();
 
     // Destroy the window
     glfwDestroyWindow(window);
