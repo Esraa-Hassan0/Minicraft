@@ -325,7 +325,7 @@ class Playstate : public our::State {
 
             // Break Block
             if (mouse.justPressed(0)) {
-                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
+                RayHit hit = terrainWorld.castRay(camPos, camDir);
                 if (hit.hit) {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
                     if (type == voxel::GRASS || type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Grass.wav");
@@ -339,7 +339,7 @@ class Playstate : public our::State {
             }
             // Place Block
             if (mouse.justPressed(1) && player) {
-                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
+                RayHit hit = terrainWorld.castRay(camPos, camDir);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
                 int* stack = inventoryCountForType(player, placeType);
                 if (hit.hit && stack && *stack > 0) {
