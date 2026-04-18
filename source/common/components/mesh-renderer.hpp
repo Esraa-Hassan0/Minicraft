@@ -14,6 +14,7 @@ namespace our
     public:
         Mesh *mesh;         // The mesh that should be drawn
         Material *material; // The material used to draw the mesh
+        bool enabled = true; // Whether to render this mesh
 
         // The ID of this component type is "Mesh Renderer"
         static std::string getID() { return "Mesh Renderer"; }
