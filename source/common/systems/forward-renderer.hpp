@@ -65,6 +65,8 @@ namespace our
         float sunWeight;
         float sunDecay;
 
+        Sampler* depthSampler;
+        bool fogEnabled = false;
     public:
         void setSunData(const glm::vec3& screenPos, const glm::vec3& color, float intensity);
 
@@ -75,6 +77,8 @@ namespace our
         void destroy();
         // This function should be called every frame to draw the given world
         void render(World* world);
+        // Set whether fog postprocessing is enabled (for day/night cycle)
+        void setFogEnabled(bool enabled);
 
 
     };

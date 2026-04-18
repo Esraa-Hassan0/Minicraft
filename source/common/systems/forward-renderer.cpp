@@ -91,6 +91,13 @@ namespace our
             postprocessSampler->set(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             postprocessSampler->set(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
+            // Create a sampler for the depth texture
+            depthSampler = new Sampler();
+            depthSampler->set(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            depthSampler->set(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            depthSampler->set(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            depthSampler->set(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
             // Create the post processing shader
             ShaderProgram *postprocessShader = new ShaderProgram();
             postprocessShader->attach("assets/shaders/fullscreen.vert", GL_VERTEX_SHADER);
@@ -129,6 +136,7 @@ namespace our
             glDeleteVertexArrays(1, &postProcessVertexArray);
             delete colorTarget;
             delete depthTarget;
+            delete depthSampler;
             delete postprocessMaterial->sampler;
             delete postprocessMaterial->shader;
             delete postprocessMaterial;
@@ -165,7 +173,7 @@ namespace our
                 sunEntity = entity;
 
             // Collect mesh renderer components into render commands
-            if (auto meshRenderer = entity->getComponent<MeshRendererComponent>(); meshRenderer)
+            if (auto meshRenderer = entity->getComponent<MeshRendererComponent>(); meshRenderer && meshRenderer->enabled)
             {
                 RenderCommand command;
                 command.localToWorld = meshRenderer->getOwner()->getLocalToWorldMatrix();
@@ -431,9 +439,32 @@ namespace our
             postprocessMaterial->shader->set("sunDensity", 0.3f);
             postprocessMaterial->shader->set("sunWeight", 0.02f);
             postprocessMaterial->shader->set("sunDecay", 0.96f);
+
+            // Bind depth texture to texture unit 1 for fog effect
+            glActiveTexture(GL_TEXTURE1);
+            depthSampler->bind(1);
+            depthTarget->bind();
+            postprocessMaterial->shader->set("depthTex", 1);
+
+            // Get camera near/far planes for linear depth calculation
+            if (camera)
+            {
+                postprocessMaterial->shader->set("cameraNear", camera->near);
+                postprocessMaterial->shader->set("cameraFar", camera->far);
+            }
+
+            // Set fog enabled state (for day/night cycle)
+            postprocessMaterial->shader->set("enableFog", fogEnabled);
+            postprocessMaterial->shader->set("isNight", fogEnabled);
+
             glBindVertexArray(postProcessVertexArray);
             glDrawArrays(GL_TRIANGLES, 0, 3);
         }
+    }
+
+    void ForwardRenderer::setFogEnabled(bool enabled)
+    {
+        this->fogEnabled = enabled;
     }
 
 }
