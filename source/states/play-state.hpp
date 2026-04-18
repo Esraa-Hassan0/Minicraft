@@ -3,6 +3,7 @@
 #include <application.hpp>
 
 #include <ecs/world.hpp>
+#include <mesh/mesh-utils.hpp>
 #include <systems/forward-renderer.hpp>
 #include <systems/free-camera-controller.hpp>
 #include <systems/movement.hpp>
@@ -15,11 +16,21 @@
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
 #include <audio/audio.hpp>
+#include <unordered_map>
 #include <vector>
+#include <cmath>
+#include <limits>
+#include <string>
+#include <algorithm>
 
 // This state shows how to use the ECS framework and deserialization.
 class Playstate : public our::State
 {
+
+    struct ChunkRenderGroup {
+        std::vector<our::Entity*> entities;
+        std::vector<our::Mesh*> meshes;
+    };
 
     voxel::World terrainWorld;
     our::World engineWorld;
@@ -29,10 +40,19 @@ class Playstate : public our::State
     our::PlayerControllerSystem playerController;
     our::CollisionSystem collisionSystem;
     our::BlockInteractionSystem blockInteraction;
-    std::vector<our::Entity*> terrainEntities;
     our::LightSystem lightSystem;
     our::TimeSystem timeSystem;
-    
+    int chunkLoadRadius = 2;
+    int chunkUnloadRadius = 3;
+    int currentCenterChunkX = std::numeric_limits<int>::min();
+    int currentCenterChunkZ = std::numeric_limits<int>::min();
+    bool terrainMeshDirty = true;
+    std::unordered_map<std::string, ChunkRenderGroup> chunkRenderGroups;
+
+    static int worldToChunkCoordinate(float worldCoord) {
+        return static_cast<int>(std::floor(worldCoord / static_cast<float>(voxel::Chunk::CHUNK_SIZE)));
+    }
+
     our::Entity* findPlayerEntity() {
         for (auto entity : engineWorld.getEntities()) {
             auto* camera = entity->getComponent<our::CameraComponent>();
@@ -44,48 +64,155 @@ class Playstate : public our::State
         return nullptr;
     }
 
-    void rebuildMesh()
-    {
-        for (auto *entity : terrainEntities)
-        {
+    our::Material* getMaterialForBlockType(int blockType) {
+        switch (blockType) {
+            case voxel::STONE: return our::AssetLoader<our::Material>::get("stone");
+            case voxel::GRASS:
+            case voxel::DIRT: return our::AssetLoader<our::Material>::get("grass");
+            case voxel::SAND: return our::AssetLoader<our::Material>::get("sand");
+            case voxel::WATER: return our::AssetLoader<our::Material>::get("water");
+            default: return our::AssetLoader<our::Material>::get("default");
+        }
+    }
+
+    void clearChunkRenderGroup(const std::string& chunkKey) {
+        auto it = chunkRenderGroups.find(chunkKey);
+        if (it == chunkRenderGroups.end()) return;
+
+        for (auto* entity : it->second.entities) {
             engineWorld.markForRemoval(entity);
         }
+
+        for (auto* mesh : it->second.meshes) {
+            delete mesh;
+        }
+
+        chunkRenderGroups.erase(it);
+    }
+
+    void clearAllChunkRenderGroups() {
+        for (auto& entry : chunkRenderGroups) {
+            for (auto* entity : entry.second.entities) {
+                engineWorld.markForRemoval(entity);
+            }
+            for (auto* mesh : entry.second.meshes) {
+                delete mesh;
+            }
+        }
+        chunkRenderGroups.clear();
+    }
+
+    void buildChunkRenderGroup(const std::string& chunkKey, const voxel::Chunk& chunk) {
+        ChunkRenderGroup renderGroup;
+
+        const int meshBlockTypes[] = {
+            voxel::STONE,
+            voxel::GRASS,
+            voxel::DIRT,
+            voxel::SAND,
+            voxel::WATER,
+            voxel::WOOD,
+            voxel::LEAF,
+            voxel::Diamond,
+            voxel::Glass
+        };
+
+        glm::vec3 chunkOrigin(
+            static_cast<float>(chunk.chunkX * voxel::Chunk::CHUNK_SIZE),
+            0.0f,
+            static_cast<float>(chunk.chunkZ * voxel::Chunk::CHUNK_SIZE)
+        );
+
+        for (int blockType : meshBlockTypes) {
+            our::Material* material = getMaterialForBlockType(blockType);
+            if (!material) continue;
+
+            our::Mesh* chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, blockType);
+            if (!chunkMesh) continue;
+
+            our::Entity* chunkEntity = engineWorld.add();
+            chunkEntity->localTransform.position = chunkOrigin;
+
+            auto* meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
+            meshRenderer->mesh = chunkMesh;
+            meshRenderer->material = material;
+
+            renderGroup.entities.push_back(chunkEntity);
+            renderGroup.meshes.push_back(chunkMesh);
+        }
+
+        chunkRenderGroups[chunkKey] = std::move(renderGroup);
+    }
+
+    void rebuildMesh()
+    {
+        int chunksUpdatedThisFrame = 0;
+        bool stillHasDirtyChunks = false;
+
+        for (auto& entry : terrainWorld.activeChunks) {
+            const std::string& chunkKey = entry.first;
+            voxel::Chunk& chunk = entry.second;
+
+            bool hasRenderGroup = chunkRenderGroups.find(chunkKey) != chunkRenderGroups.end();
+            bool needsUpdate = chunk.isDirty || !hasRenderGroup;
+            if (!needsUpdate) continue;
+
+            if (chunksUpdatedThisFrame == 0) {
+                clearChunkRenderGroup(chunkKey);
+                buildChunkRenderGroup(chunkKey, chunk);
+                chunk.isDirty = false;
+                ++chunksUpdatedThisFrame;
+            } else {
+                stillHasDirtyChunks = true;
+                break;
+            }
+        }
+
         engineWorld.deleteMarkedEntities();
-        terrainEntities.clear();
+        terrainMeshDirty = stillHasDirtyChunks;
+    }
 
-        auto visibleBlocks = terrainWorld.getVisibleBlocks();
+    void updateLoadedChunks(int centerChunkX, int centerChunkZ) {
+        bool chunkSetChanged = false;
 
-        our::Mesh *cubeMesh = our::AssetLoader<our::Mesh>::get("cube");
+        for (int dz = -chunkLoadRadius; dz <= chunkLoadRadius; ++dz) {
+            for (int dx = -chunkLoadRadius; dx <= chunkLoadRadius; ++dx) {
+                int chunkX = centerChunkX + dx;
+                int chunkZ = centerChunkZ + dz;
+                std::string key = std::to_string(chunkX) + "_" + std::to_string(chunkZ);
 
-        our::Material *stoneMat = our::AssetLoader<our::Material>::get("stone");
-        our::Material *grassMat = our::AssetLoader<our::Material>::get("grass");
-        our::Material *waterMat = our::AssetLoader<our::Material>::get("water");
-        our::Material *sandMat = our::AssetLoader<our::Material>::get("sand");
-        our::Material *defaultMat = our::AssetLoader<our::Material>::get("default");
+                if (terrainWorld.activeChunks.find(key) == terrainWorld.activeChunks.end()) {
+                    terrainWorld.generateChunk(chunkX, chunkZ);
+                    chunkSetChanged = true;
+                }
+            }
+        }
 
-        for (const auto &block : visibleBlocks)
-        {
-            our::Entity *blockEntity = engineWorld.add();
+        for (auto it = terrainWorld.activeChunks.begin(); it != terrainWorld.activeChunks.end();) {
+            const auto& chunk = it->second;
+            if (std::abs(chunk.chunkX - centerChunkX) > chunkUnloadRadius ||
+                std::abs(chunk.chunkZ - centerChunkZ) > chunkUnloadRadius) {
+                clearChunkRenderGroup(it->first);
+                it = terrainWorld.activeChunks.erase(it);
+                chunkSetChanged = true;
+            } else {
+                ++it;
+            }
+        }
 
-            // Voxel indices represent unit cells [x, x+1], so center the visual cube at +0.5.
-            blockEntity->localTransform.position = glm::vec3(block.x + 0.5f, block.y + 0.5f, block.z + 0.5f);
-            blockEntity->localTransform.scale = glm::vec3(0.5f, 0.5f, 0.5f);
+        if (chunkSetChanged) {
+            terrainMeshDirty = true;
+        }
+    }
 
-            auto meshRenderer = blockEntity->addComponent<our::MeshRendererComponent>();
-            meshRenderer->mesh = cubeMesh;
+    void streamChunksAroundPlayer(const glm::vec3& position) {
+        int playerChunkX = worldToChunkCoordinate(position.x);
+        int playerChunkZ = worldToChunkCoordinate(position.z);
 
-            if (block.type == voxel::STONE && stoneMat)
-                meshRenderer->material = stoneMat;
-            else if (block.type == voxel::GRASS && grassMat)
-                meshRenderer->material = grassMat;
-            else if (block.type == voxel::WATER && waterMat)
-                meshRenderer->material = waterMat;
-            else if (block.type == voxel::SAND && sandMat)
-                meshRenderer->material = sandMat;
-            else
-                meshRenderer->material = defaultMat;
-
-            terrainEntities.push_back(blockEntity);
+        if (playerChunkX != currentCenterChunkX || playerChunkZ != currentCenterChunkZ) {
+            currentCenterChunkX = playerChunkX;
+            currentCenterChunkZ = playerChunkZ;
+            updateLoadedChunks(playerChunkX, playerChunkZ);
         }
     }
 
@@ -105,9 +232,12 @@ class Playstate : public our::State
         }
         if (config.contains("terrain"))
         {
-            terrainWorld.deserialize(config["terrain"]);
+            auto& terrainConfig = config["terrain"];
+            terrainWorld.deserialize(terrainConfig);
+            chunkLoadRadius = terrainConfig.value("chunk-load-radius", chunkLoadRadius);
+            chunkUnloadRadius = terrainConfig.value("chunk-unload-radius", chunkLoadRadius + 1);
+            chunkUnloadRadius = std::max(chunkUnloadRadius, chunkLoadRadius);
         }
-        terrainWorld.generate();
         // We initialize the camera controller system since it needs a pointer to the app
         cameraController.enter(getApp());
         // We initialize the player controller system
@@ -119,10 +249,10 @@ class Playstate : public our::State
         auto size = getApp()->getFrameBufferSize();
         renderer.initialize(size, config["renderer"]);
 
-        rebuildMesh();
-
         our::Entity* playerEntity = findPlayerEntity();
         if (playerEntity) {
+            streamChunksAroundPlayer(playerEntity->localTransform.position);
+
             auto& pos = playerEntity->localTransform.position;
             int px = static_cast<int>(std::floor(pos.x));
             int pz = static_cast<int>(std::floor(pos.z));
@@ -132,6 +262,10 @@ class Playstate : public our::State
                     break;
                 }
             }
+        }
+
+        if (terrainMeshDirty) {
+            rebuildMesh();
         }
     }
 
@@ -159,12 +293,17 @@ class Playstate : public our::State
         // Here, we just run a bunch of systems to control the world logic
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
+
+        our::Entity *playerEntity = findPlayerEntity();
+        if (playerEntity) {
+            streamChunksAroundPlayer(playerEntity->localTransform.position);
+        }
+
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
         // cameraController.update(&engineWorld, (float)deltaTime);
 
         auto &mouse = getApp()->getMouse();
-        our::Entity *playerEntity = findPlayerEntity();
         glm::vec3 cameraPos = glm::vec3(0.0f);
         glm::vec3 cameraDir = glm::vec3(0, 0, -1);
         if (playerEntity)
@@ -176,7 +315,7 @@ class Playstate : public our::State
 
         if (playerEntity && mouse.justPressed(0))
         { // 0 is usually left click
-            voxel::RayHit hit = terrainWorld.castRay(cameraPos, cameraDir);
+            RayHit hit = terrainWorld.castRay(cameraPos, cameraDir);
              if (hit.hit) {
                 int blockType = terrainWorld.getBlock(hit.x, hit.y, hit.z);
                 if (blockType == voxel::GRASS || blockType == voxel::DIRT) {
@@ -193,25 +332,27 @@ class Playstate : public our::State
 
 
                 terrainWorld.breakBlock(hit);
-
-                rebuildMesh();
+                terrainMeshDirty = true;
             }
         }
 
         // 4. Handle Block Placing (Right Click)
         if (playerEntity && mouse.justPressed(1))
         { // 1 is usually right click
-            voxel::RayHit hit = terrainWorld.castRay(cameraPos, cameraDir);
+            RayHit hit = terrainWorld.castRay(cameraPos, cameraDir);
             if (hit.hit)
             {
                 // Place a Stone block for now
                 terrainWorld.placeBlock(hit, voxel::STONE);
-
-                rebuildMesh();
+                terrainMeshDirty = true;
             }
         }
 
         timeSystem.update(&engineWorld, (float)deltaTime);
+
+        if (terrainMeshDirty) {
+            rebuildMesh();
+        }
 
         auto &keyboard = getApp()->getKeyboard();
         renderer.render(&engineWorld);
@@ -224,6 +365,8 @@ class Playstate : public our::State
 
     void onDestroy() override
     {
+        clearAllChunkRenderGroups();
+        engineWorld.deleteMarkedEntities();
         // Don't forget to destroy the renderer
         renderer.destroy();
         // On exit, we call exit for the camera controller system to make sure that the mouse is unlocked
@@ -234,7 +377,6 @@ class Playstate : public our::State
         blockInteraction.exit();
         // Clear the engineWorld
         engineWorld.clear();
-        terrainEntities.clear();
         // and we delete all the loaded assets to free memory on the RAM and the VRAM
         our::clearAllAssets();
     }

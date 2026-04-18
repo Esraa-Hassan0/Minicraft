@@ -1,6 +1,8 @@
 #pragma once
 
 #include <glad/gl.h>
+#include <cstddef>
+#include <vector>
 #include "vertex.hpp"
 
 namespace our
@@ -21,7 +23,36 @@ namespace our
         GLsizei elementCount;
 
     public:
-        // The constructor takes two vectors:
+        // the dynamic constructor that initializes the mesh from the given vertices and elements   
+        Mesh() 
+        {
+            elementCount = 0;
+
+            glGenVertexArrays(1, &VAO);
+            glBindVertexArray(VAO);
+
+            glGenBuffers(1, &VBO);
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+            glGenBuffers(1, &EBO);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+
+            // Setup attribute pointers (same as your original constructor)
+            glEnableVertexAttribArray(ATTRIB_LOC_POSITION);
+            glVertexAttribPointer(ATTRIB_LOC_POSITION, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
+
+            glEnableVertexAttribArray(ATTRIB_LOC_COLOR);
+            glVertexAttribPointer(ATTRIB_LOC_COLOR, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+
+            glEnableVertexAttribArray(ATTRIB_LOC_TEXCOORD);
+            glVertexAttribPointer(ATTRIB_LOC_TEXCOORD, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tex_coord));
+
+            glEnableVertexAttribArray(ATTRIB_LOC_NORMAL);
+            glVertexAttribPointer(ATTRIB_LOC_NORMAL, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+
+            glBindVertexArray(0);
+        }
+         // The constructor takes two vectors:
         // - vertices which contain the vertex data.
         // - elements which contain the indices of the vertices out of which each rectangle will be constructed.
         // The mesh class does not keep a these data on the RAM. Instead, it should create
@@ -85,6 +116,27 @@ namespace our
             // nullptr => Offset inside EBO
             // nullptr = start from beginning
             glBindVertexArray(0); // Lock the configuration so nothing else overwrites it
+        }
+
+
+        void updateBuffers(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& elements)
+        {
+            elementCount = static_cast<GLsizei>(elements.size());
+
+            // Bind the existing VAO
+            glBindVertexArray(VAO);
+
+            // 1. Update the Vertex Buffer (VBO)
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            // We use GL_DYNAMIC_DRAW here because we expect this data to change often (when breaking/placing blocks)
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW);
+
+            // 2. Update the Element Buffer (EBO)
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, elements.size() * sizeof(unsigned int), elements.data(), GL_DYNAMIC_DRAW);
+
+            // Unbind to prevent accidental modification
+            glBindVertexArray(0);
         }
 
         // this function should delete the vertex & element buffers and the vertex array object

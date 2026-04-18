@@ -10,9 +10,7 @@
     },
     "scene": {
         "terrain": {
-            "width": 64,
-            "height": 32,
-            "depth": 64,
+            "height": 100,
             "waterLevel": 5,
             "stoneLevel": 4
         },
