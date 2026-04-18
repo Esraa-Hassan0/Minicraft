@@ -23,6 +23,14 @@ namespace our {
         // Resources/Inventory system
         int resourcesCollected = 0;
         int resourcesRequired = 5; // Win condition: collect this many resources
+
+        int inventoryGrass = 0;
+        int inventoryDirt = 0;
+        int inventoryWood = 0;
+        int inventoryStone = 0;
+        int inventorySand = 0;
+        /// Selected slot: 0 Grass, 1 Dirt, 2 Wood, 3 Stone, 4 Sand
+        int inventoryHotbarSlot = 0;
         
         // Movement & Physics
         glm::vec3 velocity = glm::vec3(0.0f);

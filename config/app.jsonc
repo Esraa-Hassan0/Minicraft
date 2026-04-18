@@ -60,87 +60,47 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        0.45,
-                        0.4,
-                        0.5,
-                        1
-                    ]
+                    "tint": [0.45, 0.4, 0.5, 1]
                 },
                 "lit-red": {
                     "type": "lit",
                     "shader": "lit",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1,
-                        0.3,
-                        0.3,
-                        1
-                    ],
+                    "tint": [1, 0.3, 0.3, 1],
                     "shininess": 32.0
                 },
                 "lit-blue": {
                     "type": "lit",
                     "shader": "lit",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        0.3,
-                        0.3,
-                        1.0,
-                        1
-                    ],
+                    "tint": [0.3, 0.3, 1.0, 1],
                     "shininess": 64.0
                 },
                 "lit-gold": {
                     "type": "lit",
                     "shader": "lit",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1.0,
-                        0.84,
-                        0.0,
-                        1
-                    ],
+                    "tint": [1.0, 0.84, 0.0, 1],
                     "shininess": 128.0
                 },
                 "glass": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        },
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true },
                         "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
@@ -149,12 +109,7 @@
                         "depthMask": false
                     },
                     "transparent": true,
-                    "tint": [
-                        1,
-                        1,
-                        1,
-                        1
-                    ],
+                    "tint": [1, 1, 1, 1],
                     "texture": "glass",
                     "sampler": "pixelated"
                 },
@@ -162,19 +117,10 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1,
-                        1,
-                        1,
-                        1
-                    ],
+                    "tint": [1, 1, 1, 1],
                     "texture": "grass",
                     "sampler": "pixelated"
                 },
@@ -182,19 +128,10 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1,
-                        1,
-                        1,
-                        1
-                    ],
+                    "tint": [1, 1, 1, 1],
                     "texture": "monkey",
                     "sampler": "default"
                 },
@@ -202,19 +139,10 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1,
-                        1,
-                        1,
-                        1
-                    ],
+                    "tint": [1, 1, 1, 1],
                     "texture": "moon",
                     "sampler": "default"
                 },
@@ -222,48 +150,26 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": true
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": true },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1.0,
-                        0.0,
-                        1.0,
-                        1.0
-                    ]
+                    "tint": [1.0, 0.0, 1.0, 1.0]
                 },
                 "stone": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": true
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": true },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        0.5,
-                        0.5,
-                        0.5,
-                        1.0
-                    ]
+                    "tint": [0.5, 0.5, 0.5, 1.0]
                 },
                 "water": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        },
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true },
                         "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
@@ -271,123 +177,56 @@
                         }
                     },
                     "transparent": true,
-                    "tint": [
-                        0.2,
-                        0.4,
-                        0.9,
-                        0.8
-                    ]
+                    "tint": [0.2, 0.4, 0.9, 0.8]
                 },
                 "sand": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": true
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": true },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        0.8,
-                        0.8,
-                        0.2,
-                        1.0
-                    ]
+                    "tint": [0.8, 0.8, 0.2, 1.0]
                 },
                 "sun-material": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": {
-                            "enabled": false
-                        },
-                        "depthTesting": {
-                            "enabled": true
-                        }
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
                     },
-                    "tint": [
-                        1.0,
-                        1.0,
-                        0.8,
-                        1.0
-                    ]
+                    "tint": [1.0, 1.0, 0.8, 1.0]
                 }
             }
         },
         "world": [
             {
-                "position": [
-                    0,
-                    0,
-                    0
-                ],
-                "rotation": [
-                    0,
-                    0,
-                    0
-                ],
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
                 "name": "daylight",
-                "components": [
-                    {
-                        "type": "Light",
-                        "lightType": "directional",
-                        "color": [
-                            0.95,
-                            0.98,
-                            1.0
-                        ],
-                        "ambient": [
-                            1.0,
-                            0.9,
-                            0.8
-                        ],
-                        "enabled": true
-                    }
-                ]
+                "components": [{
+                    "type": "Light",
+                    "lightType": "directional",
+                    "color": [0.95, 0.98, 1.0],
+                    "ambient": [1.0, 0.9, 0.8],
+                    "enabled": true
+                }]
             },
             {
-                "position": [
-                    0,
-                    0,
-                    0
-                ],
-                "rotation": [
-                    0,
-                    0,
-                    0
-                ],
+                "position": [0, 0, 0],
+                "rotation": [0, 0, 0],
                 "name": "nightlight",
-                "components": [
-                    {
-                        "type": "Light",
-                        "lightType": "directional",
-                        "color": [
-                            0.05,
-                            0.05,
-                            0.2
-                        ],
-                        "ambient": [
-                            0.01,
-                            0.01,
-                            0.03
-                        ],
-                        "enabled": false
-                    }
-                ]
+                "components": [{
+                    "type": "Light",
+                    "lightType": "directional",
+                    "color": [0.05, 0.05, 0.2],
+                    "ambient": [0.01, 0.01, 0.03],
+                    "enabled": false
+                }]
             },
             {
-                "position": [
-                    0,
-                    50,
-                    -50
-                ],
-                "scale": [
-                    2.0,
-                    2.0,
-                    2.0
-                ],
+                "position": [0, 50, -50],
+                "scale": [2.0, 2.0, 2.0],
                 "name": "sun",
                 "components": [
                     {
@@ -398,43 +237,19 @@
                     {
                         "type": "Light",
                         "lightType": "point",
-                        "color": [
-                            1.0,
-                            0.95,
-                            0.8
-                        ],
-                        "ambient": [
-                            0.6,
-                            0.6,
-                            0.5
-                        ],
-                        "attenuation": [
-                            1.0,
-                            0.02,
-                            0.001
-                        ],
+                        "color": [1.0, 0.95, 0.8],
+                        "ambient": [0.6, 0.6, 0.5],
+                        "attenuation": [1.0, 0.02, 0.001],
                         "enabled": true
                     }
                 ]
             },
             {
-                "position": [
-                    8,
-                    20,
-                    25
-                ],
-                "rotation": [
-                    -45,
-                    0,
-                    0
-                ],
+                "position": [8, 20, 25],
+                "rotation": [-45, 0, 0],
                 "components": [
-                    {
-                        "type": "Camera"
-                    },
-                    {
-                        "type": "PlayerComponent"
-                    },
+                    { "type": "Camera" },
+                    { "type": "PlayerComponent" },
                     {
                         "type": "AABBCollider",
                         "halfSize": [0.3, 0.9, 0.3],
