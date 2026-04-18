@@ -16,6 +16,46 @@
             "waterLevel": 5,
             "stoneLevel": 4
         },
+        "npcSpawner": {
+            "minCount": 5,
+            "maxCount": 20,
+            "spawnMargin": 2.0,
+            "worldMargin": 1.0,
+            "minPlayerDistance": 4.0,
+            "spawnAttempts": 50,
+            "types": [
+                {
+                    "namePrefix": "ourcraft-cat",
+                    "mesh": "cat",
+                    "material": "ourcraft-cat",
+                    "scale": [0.55, 0.55, 0.55],
+                    "moveSpeed": 1.0,
+                    "wanderInitialMinSec": 0.25,
+                    "wanderInitialMaxSec": 0.45,
+                    "wanderRetargetMinSec": 1.2,
+                    "wanderRetargetMaxSec": 3.0,
+                    "colliderHalfSize": [0.38, 0.52, 0.38],
+                    "colliderCenter": [0.0, 0.0, 0.0],
+                    "colliderPhysical": false,
+                    "colliderTrigger": true
+                },
+                {
+                    "namePrefix": "ourcraft-pig",
+                    "mesh": "pig",
+                    "material": "ourcraft-pig",
+                    "scale": [0.55, 0.55, 0.55],
+                    "moveSpeed": 0.95,
+                    "wanderInitialMinSec": 0.25,
+                    "wanderInitialMaxSec": 0.45,
+                    "wanderRetargetMinSec": 1.2,
+                    "wanderRetargetMaxSec": 3.0,
+                    "colliderHalfSize": [0.4, 0.5, 0.4],
+                    "colliderCenter": [0.0, 0.0, 0.0],
+                    "colliderPhysical": false,
+                    "colliderTrigger": true
+                }
+            ]
+        },
         "renderer": {
             "sky": "assets/textures/sky.png",
             "postprocess": "assets/shaders/postprocess/godrays.frag"
@@ -40,13 +80,17 @@
                 "grass": "assets/textures/default_grass.png",
                 "wood": "assets/textures/wood.jpg",
                 "glass": "assets/textures/glass-panels.png",
-                "monkey": "assets/textures/monkey.png"
+                "monkey": "assets/textures/monkey.png",
+                "cat": "assets/textures/cat.png",
+                "pig": "assets/textures/pig.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
                 "monkey": "assets/models/monkey.obj",
                 "plane": "assets/models/plane.obj",
-                "sphere": "assets/models/sphere.obj"
+                "sphere": "assets/models/sphere.obj",
+                "cat": "assets/models/ourcraft/cat.glb",
+                "pig": "assets/models/ourcraft/pig.glb"
             },
             "samplers": {
                 "default": {},
@@ -199,6 +243,46 @@
                     ],
                     "texture": "monkey",
                     "sampler": "default"
+                },
+                "ourcraft-cat": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
+                    "texture": "cat",
+                    "sampler": "pixelated"
+                },
+                "ourcraft-pig": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
+                    "texture": "pig",
+                    "sampler": "pixelated"
                 },
                 "moon": {
                     "type": "textured",

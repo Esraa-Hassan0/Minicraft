@@ -9,6 +9,7 @@
 #include "player.hpp"
 #include "aabb-collider.hpp"
 #include "light.hpp"
+#include "killable-npc.hpp"
 
 namespace our
 {
@@ -48,6 +49,10 @@ namespace our
         else if (type == LightComponent::getID())
         {
             component = entity->addComponent<LightComponent>();
+        }
+        else if (type == KillableNpcComponent::getID())
+        {
+            component = entity->addComponent<KillableNpcComponent>();
         }
         if (component)
             component->deserialize(data);

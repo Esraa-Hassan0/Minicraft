@@ -16,9 +16,20 @@
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
 #include <components/player.hpp>
+#include <components/aabb-collider.hpp>
+#include <components/killable-npc.hpp>
+#include <components/camera.hpp>
 #include <audio/audio.hpp>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <ctime>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 // This state shows how to use the ECS framework and deserialization.
@@ -36,6 +47,30 @@ class Playstate : public our::State
     std::vector<our::Entity*> terrainEntities;
     our::LightSystem lightSystem;
     our::TimeSystem timeSystem;
+    float npcWorldMargin = 1.0f;
+    float npcSpawnMargin = 2.0f;
+    float npcMinPlayerDistance = 4.0f;
+    int npcSpawnAttempts = 50;
+    int npcCountMin = 5;
+    int npcCountMax = 20;
+
+    struct NpcSpawnTypeConfig {
+        std::string namePrefix;
+        std::string meshName;
+        std::string materialName;
+        glm::vec3 scale = glm::vec3(0.55f);
+        glm::vec3 colliderHalfSize = glm::vec3(0.4f, 0.5f, 0.4f);
+        glm::vec3 colliderCenter = glm::vec3(0.0f);
+        bool colliderPhysical = false;
+        bool colliderTrigger = true;
+        float moveSpeed = 1.0f;
+        float wanderInitialMinSec = 0.25f;
+        float wanderInitialMaxSec = 0.45f;
+        float wanderRetargetMinSec = 1.2f;
+        float wanderRetargetMaxSec = 3.0f;
+    };
+
+    std::vector<NpcSpawnTypeConfig> npcSpawnTypes;
     
     our::Entity* findPlayerEntity() {
         for (auto entity : engineWorld.getEntities()) {
@@ -89,6 +124,255 @@ class Playstate : public our::State
         if (player->resourcesCollected >= player->resourcesRequired) {
             player->gameState = our::GameState::WIN;
         }
+    }
+
+    static int topSolidBlockY(const voxel::World& w, int gx, int gz) {
+        for (int iy = w.height - 1; iy >= 0; --iy) {
+            if (w.getBlock(gx, iy, gz) != voxel::AIR) {
+                return iy;
+            }
+        }
+        return -1;
+    }
+
+    static void snapKillableNpcFeetToTerrain(our::Entity* entity, const voxel::World& terrain) {
+        auto* kn = entity->getComponent<our::KillableNpcComponent>();
+        if (!kn) {
+            return;
+        }
+        glm::vec3& p = entity->localTransform.position;
+        const float sy = entity->localTransform.scale.y;
+        const float footLift = 0.5f * sy + 0.04f;
+        const int gx = static_cast<int>(std::floor(p.x));
+        const int gz = static_cast<int>(std::floor(p.z));
+        const int ty = topSolidBlockY(terrain, gx, gz);
+        if (ty >= 0) {
+            p.y = static_cast<float>(ty + 1) + footLift;
+        }
+    }
+
+    static void snapKillableNpcsToTerrain(our::World* world, const voxel::World& terrain) {
+        for (auto* entity : world->getEntities()) {
+            if (!entity->getComponent<our::KillableNpcComponent>()) {
+                continue;
+            }
+            snapKillableNpcFeetToTerrain(entity, terrain);
+        }
+    }
+
+    static glm::vec3 jsonVec3(const nlohmann::json& value) {
+        return glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>());
+    }
+
+    void loadNpcSpawnerConfig(const nlohmann::json& sceneConfig) {
+        if (!sceneConfig.contains("npcSpawner")) {
+            return;
+        }
+        const auto& cfg = sceneConfig["npcSpawner"];
+        npcWorldMargin = cfg.value("worldMargin", npcWorldMargin);
+        npcSpawnMargin = cfg.value("spawnMargin", npcSpawnMargin);
+        npcMinPlayerDistance = cfg.value("minPlayerDistance", npcMinPlayerDistance);
+        npcSpawnAttempts = cfg.value("spawnAttempts", npcSpawnAttempts);
+        npcCountMin = cfg.value("minCount", npcCountMin);
+        npcCountMax = cfg.value("maxCount", npcCountMax);
+        if (npcCountMax < npcCountMin) {
+            npcCountMax = npcCountMin;
+        }
+
+        npcSpawnTypes.clear();
+        if (!cfg.contains("types") || !cfg["types"].is_array()) {
+            return;
+        }
+
+        for (const auto& t : cfg["types"]) {
+            if (!t.is_object()) {
+                continue;
+            }
+            NpcSpawnTypeConfig type;
+            type.namePrefix = t.value("namePrefix", "npc");
+            type.meshName = t.value("mesh", "");
+            type.materialName = t.value("material", "");
+            if (t.contains("scale")) type.scale = jsonVec3(t["scale"]);
+            if (t.contains("colliderHalfSize")) type.colliderHalfSize = jsonVec3(t["colliderHalfSize"]);
+            if (t.contains("colliderCenter")) type.colliderCenter = jsonVec3(t["colliderCenter"]);
+            type.colliderPhysical = t.value("colliderPhysical", type.colliderPhysical);
+            type.colliderTrigger = t.value("colliderTrigger", type.colliderTrigger);
+            type.moveSpeed = t.value("moveSpeed", type.moveSpeed);
+            type.wanderInitialMinSec = t.value("wanderInitialMinSec", type.wanderInitialMinSec);
+            type.wanderInitialMaxSec = t.value("wanderInitialMaxSec", type.wanderInitialMaxSec);
+            type.wanderRetargetMinSec = t.value("wanderRetargetMinSec", type.wanderRetargetMinSec);
+            type.wanderRetargetMaxSec = t.value("wanderRetargetMaxSec", type.wanderRetargetMaxSec);
+            if (type.wanderInitialMaxSec < type.wanderInitialMinSec) {
+                type.wanderInitialMaxSec = type.wanderInitialMinSec;
+            }
+            if (type.wanderRetargetMaxSec < type.wanderRetargetMinSec) {
+                type.wanderRetargetMaxSec = type.wanderRetargetMinSec;
+            }
+            npcSpawnTypes.push_back(type);
+        }
+    }
+
+    /// Spawns animals using config from scene.npcSpawner.
+    void spawnKillableNpcsForSession() {
+        if (npcSpawnTypes.empty()) {
+            return;
+        }
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
+        const unsigned tick = static_cast<unsigned>(ms.count() & 0xFFFFFFFFu);
+        const int count = npcCountMin + static_cast<int>(tick % (npcCountMax - npcCountMin + 1));
+
+        our::Entity* playerEntity = findPlayerEntity();
+        const glm::vec2 playerXZ(
+            playerEntity ? playerEntity->localTransform.position.x : static_cast<float>(terrainWorld.width) * 0.5f,
+            playerEntity ? playerEntity->localTransform.position.z : static_cast<float>(terrainWorld.depth) * 0.5f);
+
+        const int spanX = std::max(1, terrainWorld.width - static_cast<int>(npcSpawnMargin * 2.0f));
+        const int spanZ = std::max(1, terrainWorld.depth - static_cast<int>(npcSpawnMargin * 2.0f));
+
+        for (int i = 0; i < count; ++i) {
+            const unsigned pickSeed = (((tick ^ 0xA5A5A5A5u) >> (i % 16)) ^ (static_cast<unsigned>(i) * 2246822519u));
+            const auto& type = npcSpawnTypes[pickSeed % npcSpawnTypes.size()];
+
+            float x = npcSpawnMargin;
+            float z = npcSpawnMargin;
+            for (int attempt = 0; attempt < npcSpawnAttempts; ++attempt) {
+                x = npcSpawnMargin + static_cast<float>(rand() % spanX);
+                z = npcSpawnMargin + static_cast<float>(rand() % spanZ);
+                if (glm::length(glm::vec2(x, z) - playerXZ) >= npcMinPlayerDistance) {
+                    break;
+                }
+            }
+
+            our::Entity* e = engineWorld.add();
+            e->name = type.namePrefix + "-" + std::to_string(i);
+            e->localTransform.position = glm::vec3(x, 0.0f, z);
+            e->localTransform.scale = type.scale;
+            e->localTransform.rotation = glm::vec3(0.0f);
+
+            auto* mr = e->addComponent<our::MeshRendererComponent>();
+            mr->mesh = our::AssetLoader<our::Mesh>::get(type.meshName);
+            mr->material = our::AssetLoader<our::Material>::get(type.materialName);
+
+            auto* kn = e->addComponent<our::KillableNpcComponent>();
+            kn->moveSpeed = type.moveSpeed;
+            kn->wanderRetargetMinSec = type.wanderRetargetMinSec;
+            kn->wanderRetargetMaxSec = type.wanderRetargetMaxSec;
+            const float initRange = type.wanderInitialMaxSec - type.wanderInitialMinSec;
+            const float r = static_cast<float>(rand() % 10000) / 10000.0f;
+            kn->wanderTimerSec = type.wanderInitialMinSec + initRange * r;
+
+            auto* col = e->addComponent<our::AABBColliderComponent>();
+            col->halfSize = type.colliderHalfSize;
+            col->center = type.colliderCenter;
+            col->isPhysical = type.colliderPhysical;
+            col->isTrigger = type.colliderTrigger;
+        }
+    }
+
+    void updateKillableNpcWander(float dt) {
+        const float margin = npcWorldMargin;
+        const float wmin = margin;
+        const float wmaxX = static_cast<float>(terrainWorld.width) - margin;
+        const float wmaxZ = static_cast<float>(terrainWorld.depth) - margin;
+
+        for (auto* entity : engineWorld.getEntities()) {
+            auto* kn = entity->getComponent<our::KillableNpcComponent>();
+            if (!kn) {
+                continue;
+            }
+
+            kn->wanderTimerSec -= dt;
+            if (kn->wanderTimerSec <= 0.0f) {
+                const float a =
+                    static_cast<float>(rand() % 10000) / 10000.0f * 6.2831853f;
+                kn->wanderDirXZ = glm::vec2(std::cos(a), std::sin(a));
+                const float range = kn->wanderRetargetMaxSec - kn->wanderRetargetMinSec;
+                const float r = static_cast<float>(rand() % 10000) / 10000.0f;
+                kn->wanderTimerSec = kn->wanderRetargetMinSec + range * r;
+            }
+
+            glm::vec2 dir = kn->wanderDirXZ;
+            const float len = glm::length(dir);
+            if (len > 1e-4f) {
+                dir /= len;
+            } else {
+                dir = glm::vec2(1.0f, 0.0f);
+            }
+
+            glm::vec3& p = entity->localTransform.position;
+            const float step = kn->moveSpeed * dt;
+            float nx = p.x + dir.x * step;
+            float nz = p.z + dir.y * step;
+            nx = std::clamp(nx, wmin, wmaxX);
+            nz = std::clamp(nz, wmin, wmaxZ);
+
+            const int gx = static_cast<int>(std::floor(nx));
+            const int gz = static_cast<int>(std::floor(nz));
+            if (topSolidBlockY(terrainWorld, gx, gz) < 0) {
+                kn->wanderTimerSec = 0.0f;
+                continue;
+            }
+
+            p.x = nx;
+            p.z = nz;
+            entity->localTransform.rotation.x = 0.0f;
+            entity->localTransform.rotation.z = 0.0f;
+            entity->localTransform.rotation.y = std::atan2(dir.x, dir.y);
+
+            snapKillableNpcFeetToTerrain(entity, terrainWorld);
+        }
+    }
+
+    static float distanceToVoxelHit(const glm::vec3& rayOrigin, const voxel::RayHit& hit) {
+        if (!hit.hit) {
+            return 1.0e9f;
+        }
+        const glm::vec3 c(static_cast<float>(hit.x) + 0.5f, static_cast<float>(hit.y) + 0.5f,
+                          static_cast<float>(hit.z) + 0.5f);
+        return glm::length(c - rayOrigin);
+    }
+
+    static std::optional<std::pair<our::Entity*, float>> raycastKillableNpcs(our::World* world,
+                                                                             const glm::vec3& rayOrigin,
+                                                                             const glm::vec3& rayDirection,
+                                                                             float maxDistance,
+                                                                             our::Entity* playerEntity) {
+        const glm::vec3 dir = glm::normalize(rayDirection);
+        float bestT = maxDistance;
+        our::Entity* bestEntity = nullptr;
+
+        for (auto* entity : world->getEntities()) {
+            if (entity == playerEntity) {
+                continue;
+            }
+            if (!entity->getComponent<our::KillableNpcComponent>()) {
+                continue;
+            }
+            auto* col = entity->getComponent<our::AABBColliderComponent>();
+            if (!col) {
+                continue;
+            }
+            const glm::vec3 pos = entity->localTransform.position;
+            const glm::vec3 boxMin = col->getMinCorner(pos);
+            const glm::vec3 boxMax = col->getMaxCorner(pos);
+
+            glm::vec3 invDir(1.0f / dir.x, 1.0f / dir.y, 1.0f / dir.z);
+            glm::vec3 t0 = (boxMin - rayOrigin) * invDir;
+            glm::vec3 t1 = (boxMax - rayOrigin) * invDir;
+            glm::vec3 tmin = glm::min(t0, t1);
+            glm::vec3 tmax = glm::max(t0, t1);
+            const float tEnter = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+            const float tExit = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+            if (tEnter < tExit && tExit > 0.0f && tEnter > 0.0f && tEnter < bestT) {
+                bestT = tEnter;
+                bestEntity = entity;
+            }
+        }
+        if (bestEntity) {
+            return std::make_pair(bestEntity, bestT);
+        }
+        return std::nullopt;
     }
 
     /// Small preview matching voxel materials (textures / tints from scene assets).
@@ -200,7 +484,9 @@ class Playstate : public our::State
         {
             terrainWorld.deserialize(config["terrain"]);
         }
+        loadNpcSpawnerConfig(config);
         terrainWorld.generate();
+        std::srand(static_cast<unsigned>(std::time(nullptr)));
         // We initialize the camera controller system since it needs a pointer to the app
         cameraController.enter(getApp());
         // We initialize the player controller system
@@ -226,6 +512,8 @@ class Playstate : public our::State
                 }
             }
         }
+        spawnKillableNpcsForSession();
+        snapKillableNpcsToTerrain(&engineWorld, terrainWorld);
     }
 
     void onImmediateGui() override
@@ -308,6 +596,7 @@ class Playstate : public our::State
         // Here, we just run a bunch of systems to control the world logic
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
+        updateKillableNpcWander(static_cast<float>(deltaTime));
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
         // cameraController.update(&engineWorld, (float)deltaTime);
@@ -327,9 +616,19 @@ class Playstate : public our::State
 
         if (playerEntity && mouse.justPressed(0))
         { // 0 is usually left click
-            voxel::RayHit hit = terrainWorld.castRay(cameraPos, cameraDir);
-             if (hit.hit) {
-                int blockType = terrainWorld.getBlock(hit.x, hit.y, hit.z);
+            constexpr float reach = 8.0f;
+            std::optional<std::pair<our::Entity*, float>> npcHit =
+                raycastKillableNpcs(&engineWorld, cameraPos, cameraDir, reach, playerEntity);
+            voxel::RayHit vhit = terrainWorld.castRay(cameraPos, cameraDir, reach);
+            const float voxelDist = distanceToVoxelHit(cameraPos, vhit);
+            const bool npcCloser = npcHit.has_value() && (!vhit.hit || npcHit->second < voxelDist);
+
+            if (npcCloser) {
+                engineWorld.markForRemoval(npcHit->first);
+                engineWorld.deleteMarkedEntities();
+                our::AudioSystem::playSound("assets/sounds/animal_hit.wav");
+            } else if (vhit.hit) {
+                int blockType = terrainWorld.getBlock(vhit.x, vhit.y, vhit.z);
                 if (blockType == voxel::GRASS || blockType == voxel::DIRT) {
                     our::AudioSystem::playSound("assets/sounds/Grass.wav");
                 } else if (blockType == voxel::STONE || blockType == voxel::Diamond || blockType == voxel::Glass) {
@@ -346,7 +645,7 @@ class Playstate : public our::State
                     registerCollectedBlock(player, blockType);
                 }
 
-                terrainWorld.breakBlock(hit);
+                terrainWorld.breakBlock(vhit);
 
                 rebuildMesh();
             }

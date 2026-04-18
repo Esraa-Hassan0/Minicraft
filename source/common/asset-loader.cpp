@@ -9,7 +9,14 @@
 #include "material/material.hpp"
 #include "deserialize-utils.hpp"
 
+#include <string>
+
 namespace our {
+
+    static bool pathEndsWith(const std::string& path, const char* suffix, std::size_t len) {
+        return path.size() >= len && path.compare(path.size() - len, len, suffix) == 0;
+    }
+
 
     // This will load all the shaders defined in "data"
     // data must be in the form:
@@ -68,7 +75,11 @@ namespace our {
         if(data.is_object()){
             for(auto& [name, desc] : data.items()){
                 std::string path = desc.get<std::string>();
-                assets[name] = mesh_utils::loadOBJ(path);
+                if (pathEndsWith(path, ".glb", 4) || pathEndsWith(path, ".gltf", 5)) {
+                    assets[name] = mesh_utils::loadGLTF(path);
+                } else {
+                    assets[name] = mesh_utils::loadOBJ(path);
+                }
             }
         }
     };

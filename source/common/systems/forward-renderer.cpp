@@ -315,6 +315,9 @@ namespace our
         // LitMaterial gets extra lighting uniforms (transform, model, normalMatrix, lights).
         for (auto &command : opaqueCommands)
         {
+            if (!command.mesh) {
+                continue;
+            }
             command.material->setup();
             auto *sh = command.material->shader;
             sh->set("transform", VP * command.localToWorld);
@@ -389,6 +392,9 @@ namespace our
         // (handled by std::sort earlier using camera distance)
         for (auto &command : transparentCommands)
         {
+            if (!command.mesh) {
+                continue;
+            }
             command.material->setup();
             auto *sh = command.material->shader;
             sh->set("transform", VP * command.localToWorld);
