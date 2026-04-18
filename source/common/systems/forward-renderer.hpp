@@ -58,9 +58,18 @@ namespace our
         GLuint postprocessFrameBuffer, postProcessVertexArray;
         Texture2D *colorTarget, *depthTarget;
         TexturedMaterial* postprocessMaterial;
+    glm::vec3 sunScreenPosition;
+        glm::vec3 sunColor;
+        float sunIntensity;
+        float sunDensity;
+        float sunWeight;
+        float sunDecay;
+
         Sampler* depthSampler;
         bool fogEnabled = false;
     public:
+        void setSunData(const glm::vec3& screenPos, const glm::vec3& color, float intensity);
+
         // Initialize the renderer including the sky and the Postprocessing objects.
         // windowSize is the width & height of the window (in pixels).
         void initialize(glm::ivec2 windowSize, const nlohmann::json& config);

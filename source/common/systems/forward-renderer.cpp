@@ -6,6 +6,13 @@
 namespace our
 {
 
+    void ForwardRenderer::setSunData(const glm::vec3& screenPos, const glm::vec3& color, float intensity)
+    {
+        this->sunScreenPosition = screenPos;
+        this->sunColor = color;
+        this->sunIntensity = intensity;
+    }
+
     void ForwardRenderer::initialize(glm::ivec2 windowSize, const nlohmann::json &config)
     {
         // First, we store the window size for later use
@@ -138,6 +145,11 @@ namespace our
 
     void ForwardRenderer::render(World *world)
     {
+        // Default sun data (will be overwritten if sun entity found)
+        sunScreenPosition = glm::vec3(0.5f, 0.5f, 0.0f);
+        sunColor = glm::vec3(1.0f, 0.9f, 0.7f);
+        sunIntensity = 1.0f;
+
         // PHASE 1: Collect all renderable components from the ECS world.
         // We iterate through all entities looking for:
         //   - CameraComponent: required for rendering (provides view/projection)
@@ -145,6 +157,7 @@ namespace our
         //   - LightComponent: defines lights affecting lit materials
 
         CameraComponent *camera = nullptr;
+        Entity* sunEntity = nullptr;
         opaqueCommands.clear();
         transparentCommands.clear();
         lights.clear();
@@ -154,6 +167,10 @@ namespace our
             // Find the first camera in the world (needed for rendering)
             if (!camera)
                 camera = entity->getComponent<CameraComponent>();
+
+            // Find the sun entity for god rays calculation
+            if (!sunEntity && entity->name == "sun")
+                sunEntity = entity;
 
             // Collect mesh renderer components into render commands
             if (auto meshRenderer = entity->getComponent<MeshRendererComponent>(); meshRenderer && meshRenderer->enabled)
@@ -247,6 +264,27 @@ namespace our
 
         // TODO: (Req 9) Get the camera ViewProjection matrix and store it in VP
         glm::mat4 VP = camera->getProjectionMatrix(windowSize) * camera->getViewMatrix();
+
+        // Calculate sun screen position for god rays
+        if (sunEntity)
+        {
+            glm::vec3 sunWorldPos = sunEntity->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            glm::vec4 sunClipPos = VP * glm::vec4(sunWorldPos, 1.0f);
+            if (sunClipPos.w > 0.0f)
+            {
+                sunScreenPosition = glm::vec3(
+                    (sunClipPos.x / sunClipPos.w) * 0.5f + 0.5f,
+                    (sunClipPos.y / sunClipPos.w) * 0.5f + 0.5f,
+                    sunClipPos.w
+                );
+                // Extract sun color from light component if available
+                if (auto* lc = sunEntity->getComponent<LightComponent>())
+                {
+                    sunColor = lc->color;
+                    sunIntensity = lc->enabled ? 1.0f : 0.0f;
+                }
+            }
+        }
 
         // TODO: (Req 9) Set the OpenGL viewport using viewportStart and viewportSize
         glViewport(0, 0, windowSize.x, windowSize.y);
@@ -395,6 +433,12 @@ namespace our
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             // TODO: (Req 11) Setup the postprocess material and draw the fullscreen triangle
             postprocessMaterial->setup();
+            postprocessMaterial->shader->set("sunScreenPos", sunScreenPosition);
+            postprocessMaterial->shader->set("sunColor", sunColor);
+            postprocessMaterial->shader->set("sunIntensity", sunIntensity);
+            postprocessMaterial->shader->set("sunDensity", 0.3f);
+            postprocessMaterial->shader->set("sunWeight", 0.02f);
+            postprocessMaterial->shader->set("sunDecay", 0.96f);
 
             // Bind depth texture to texture unit 1 for fog effect
             glActiveTexture(GL_TEXTURE1);

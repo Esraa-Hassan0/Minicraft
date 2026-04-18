@@ -18,7 +18,7 @@
         },
         "renderer": {
             "sky": "assets/textures/sky.png",
-            "postprocess": "assets/shaders/postprocess/fog.frag"
+            "postprocess": "assets/shaders/postprocess/godrays.frag"
         },
         "assets": {
             "shaders": {

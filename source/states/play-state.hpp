@@ -10,6 +10,7 @@
 #include <systems/collision-system.hpp>
 #include <systems/block-interaction.hpp>
 #include <systems/light.hpp>
+#include <systems/time-system.hpp>
 #include <asset-loader.hpp>
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
@@ -30,7 +31,7 @@ class Playstate : public our::State
     our::BlockInteractionSystem blockInteraction;
     std::vector<our::Entity*> terrainEntities;
     our::LightSystem lightSystem;
-    bool isDaytime = true;
+    our::TimeSystem timeSystem;
     
     our::Entity* findPlayerEntity() {
         for (auto entity : engineWorld.getEntities()) {
@@ -113,6 +114,7 @@ class Playstate : public our::State
         playerController.enter(getApp());
         // We initialize the block interaction system
         blockInteraction.enter(getApp());
+        timeSystem.initialize(&engineWorld);
         // Then we initialize the renderer
         auto size = getApp()->getFrameBufferSize();
         renderer.initialize(size, config["renderer"]);
@@ -160,9 +162,6 @@ class Playstate : public our::State
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
         // cameraController.update(&engineWorld, (float)deltaTime);
-        // And finally we use the renderer system to draw the scene
-        // Get a reference to the keyboard object
-        auto &keyboard = getApp()->getKeyboard();
 
         auto &mouse = getApp()->getMouse();
         our::Entity *playerEntity = findPlayerEntity();
@@ -212,39 +211,9 @@ class Playstate : public our::State
             }
         }
 
-        // Handle sky light (day/night)
-        if (keyboard.justPressed(GLFW_KEY_T))
-        {
-            isDaytime = !isDaytime;
+        timeSystem.update(&engineWorld, (float)deltaTime);
 
-            for (auto entity : engineWorld.getEntities())
-            {
-                /* Check if this entity has a light component */
-                if (auto *light = entity->getComponent<our::LightComponent>())
-                {
-                    /* Toggle based on the name assigned in the JSON config */
-                    if (entity->name == "daylight")
-                        light->enabled = isDaytime;
-                    else if (entity->name == "nightlight")
-                        light->enabled = !isDaytime;
-                    else if (entity->name == "sun")
-                        light->enabled = isDaytime;
-                }
-                /* Toggle mesh renderer for sun visibility */
-                if (auto *meshRenderer = entity->getComponent<our::MeshRendererComponent>())
-                {
-                    if (entity->name == "sun")
-                        meshRenderer->enabled = isDaytime;
-                }
-            }
-
-            // Enable fog postprocessing only at night
-            renderer.setFogEnabled(!isDaytime);
-        }
-
-        // Set initial fog state based on time of day
-        renderer.setFogEnabled(!isDaytime);
-
+        auto &keyboard = getApp()->getKeyboard();
         renderer.render(&engineWorld);
         if (keyboard.justPressed(GLFW_KEY_ESCAPE))
         {
