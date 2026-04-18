@@ -298,6 +298,44 @@
                         1.0
                     ]
                 },
+                "dirt": {
+                    "type": "tinted",
+                    "shader": "tinted",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        0.45,
+                        0.3,
+                        0.2,
+                        1.0
+                    ]
+                },
+                "wood-block": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
+                    "texture": "wood",
+                    "sampler": "pixelated"
+                },
                 "sun-material": {
                     "type": "tinted",
                     "shader": "tinted",
