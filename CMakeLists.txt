@@ -94,6 +94,8 @@ set(COMMON_SOURCES
         source/common/systems/forward-renderer.cpp
         source/common/systems/free-camera-controller.hpp
         source/common/systems/movement.hpp
+        source/common/systems/time-system.hpp
+        source/common/systems/time-system.cpp
 
         source/common/audio/audio.hpp
         source/common/audio/audio.cpp
