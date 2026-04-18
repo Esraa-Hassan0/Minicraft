@@ -6,6 +6,7 @@
 #include <texture/texture-utils.hpp>
 #include <material/material.hpp>
 #include <mesh/mesh.hpp>
+#include <mesh/mesh-utils.hpp>
 #include <ecs/world.hpp>
 #include <systems/forward-renderer.hpp>
 #include <systems/free-camera-controller.hpp>
@@ -15,6 +16,7 @@
 #include <components/mesh-renderer.hpp>
 #include <functional>
 #include <array>
+#include <vector>
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -76,6 +78,18 @@ class Menustate: public our::State {
     float time = 0.0f;
     float menuCameraYaw = 0.0f;
     std::array<MenuButton, 2> buttons;
+    std::vector<our::Mesh*> bgTerrainChunkMeshes;
+
+    our::Material* getMaterialForBlockType(int blockType) {
+        switch (blockType) {
+            case voxel::STONE: return our::AssetLoader<our::Material>::get("stone");
+            case voxel::GRASS:
+            case voxel::DIRT: return our::AssetLoader<our::Material>::get("grass");
+            case voxel::SAND: return our::AssetLoader<our::Material>::get("sand");
+            case voxel::WATER: return our::AssetLoader<our::Material>::get("water");
+            default: return our::AssetLoader<our::Material>::get("default");
+        }
+    }
 
 
     void onInitialize() override {
@@ -103,30 +117,50 @@ class Menustate: public our::State {
                     if(cfg["scene"].contains("terrain")) {
                         voxel::World terrainWorld;
                         terrainWorld.deserialize(cfg["scene"]["terrain"]);
-                        terrainWorld.generate();
-                        
-                        auto visibleBlocks = terrainWorld.getVisibleBlocks();
-                        our::Mesh* cubeMesh = our::AssetLoader<our::Mesh>::get("cube");
-                        our::Material* stoneMat = our::AssetLoader<our::Material>::get("stone");
-                        our::Material* grassMat = our::AssetLoader<our::Material>::get("grass");
-                        our::Material* waterMat = our::AssetLoader<our::Material>::get("water");
-                        our::Material* sandMat  = our::AssetLoader<our::Material>::get("sand");
-                        our::Material* defaultMat = our::AssetLoader<our::Material>::get("default");
+                        int menuChunkRadius = cfg["scene"]["terrain"].value("menu-chunk-radius", 1);
+                        for (int dz = -menuChunkRadius; dz <= menuChunkRadius; ++dz) {
+                            for (int dx = -menuChunkRadius; dx <= menuChunkRadius; ++dx) {
+                                terrainWorld.generateChunk(dx, dz);
+                            }
+                        }
 
-                        for(const auto& block : visibleBlocks) {
-                            our::Entity* blockEntity = bgWorld.add();
+                        for (const auto& entry : terrainWorld.activeChunks) {
+                            const auto& chunk = entry.second;
 
-                            blockEntity->localTransform.position = glm::vec3(block.x + 0.5f, block.y + 0.5f, block.z + 0.5f);
-                            blockEntity->localTransform.scale = glm::vec3(0.5f, 0.5f, 0.5f);
+                            const int meshBlockTypes[] = {
+                                voxel::STONE,
+                                voxel::GRASS,
+                                voxel::DIRT,
+                                voxel::SAND,
+                                voxel::WATER,
+                                voxel::WOOD,
+                                voxel::LEAF,
+                                voxel::Diamond,
+                                voxel::Glass
+                            };
 
-                            auto meshRenderer = blockEntity->addComponent<our::MeshRendererComponent>();
-                            meshRenderer->mesh = cubeMesh;
+                            glm::vec3 chunkOrigin(
+                                static_cast<float>(chunk.chunkX * voxel::Chunk::CHUNK_SIZE),
+                                0.0f,
+                                static_cast<float>(chunk.chunkZ * voxel::Chunk::CHUNK_SIZE)
+                            );
 
-                            if (block.type == voxel::STONE && stoneMat) meshRenderer->material = stoneMat;
-                            else if (block.type == voxel::GRASS && grassMat) meshRenderer->material = grassMat;
-                            else if (block.type == voxel::WATER && waterMat) meshRenderer->material = waterMat;
-                            else if (block.type == voxel::SAND && sandMat) meshRenderer->material = sandMat;
-                            else meshRenderer->material = defaultMat;
+                            for (int blockType : meshBlockTypes) {
+                                our::Material* material = getMaterialForBlockType(blockType);
+                                if (!material) continue;
+
+                                our::Mesh* chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, blockType);
+                                if (!chunkMesh) continue;
+
+                                our::Entity* chunkEntity = bgWorld.add();
+                                chunkEntity->localTransform.position = chunkOrigin;
+
+                                auto* meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
+                                meshRenderer->mesh = chunkMesh;
+                                meshRenderer->material = material;
+
+                                bgTerrainChunkMeshes.push_back(chunkMesh);
+                            }
                         }
                     }
 
@@ -470,6 +504,11 @@ class Menustate: public our::State {
 
         if (titleTexture) delete titleTexture;
         delete quad;
+
+        for (auto* mesh : bgTerrainChunkMeshes) {
+            delete mesh;
+        }
+        bgTerrainChunkMeshes.clear();
 
         if (bgWorldLoaded) {
             bgRenderer.destroy();
