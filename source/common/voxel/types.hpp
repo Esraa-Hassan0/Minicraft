@@ -1,3 +1,5 @@
+#pragma once
+
 namespace voxel {
 enum block_types{
     AIR = 0,
