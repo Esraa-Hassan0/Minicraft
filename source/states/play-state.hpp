@@ -245,12 +245,12 @@ class Playstate : public our::State {
         ImU32 fallbackColor = IM_COL32(60, 60, 65, 255);
 
         if(hotbarSlot == 0) { tex = our::AssetLoader<our::Texture2D>::get("grass-side"); fallbackColor = IM_COL32(72, 130, 58, 255); }
-        else if(hotbarSlot == 1) fallbackColor = IM_COL32(115, 77, 51, 255);
+        else if(hotbarSlot == 1) { tex = our::AssetLoader<our::Texture2D>::get("dirt"); fallbackColor = IM_COL32(115, 77, 51, 255); }
         else if(hotbarSlot == 2) { tex = our::AssetLoader<our::Texture2D>::get("wood"); fallbackColor = IM_COL32(130, 85, 48, 255); }
-        else if(hotbarSlot == 3) fallbackColor = IM_COL32(118, 118, 118, 255);
-        else if(hotbarSlot == 4) fallbackColor = IM_COL32(204, 190, 72, 255);
+        else if(hotbarSlot == 3) { tex = our::AssetLoader<our::Texture2D>::get("stone"); fallbackColor = IM_COL32(118, 118, 118, 255); }
+        else if(hotbarSlot == 4) { tex = our::AssetLoader<our::Texture2D>::get("sand"); fallbackColor = IM_COL32(204, 190, 72, 255); }
 
-        if (tex) dl->AddImage((ImTextureID)(intptr_t)tex->getOpenGLName(), iconMin, iconMax);
+        if (tex) dl->AddImage((ImTextureID)(intptr_t)tex->getOpenGLName(), iconMin, iconMax, ImVec2(0, 1), ImVec2(1, 0));  // to fix the inverted texture
         else dl->AddRectFilled(iconMin, iconMax, fallbackColor, 4.0f);
         dl->AddRect(iconMin, iconMax, outline, 4.0f, ImDrawCornerFlags_All, 1.25f);
     }
