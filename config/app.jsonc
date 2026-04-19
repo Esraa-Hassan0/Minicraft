@@ -36,9 +36,16 @@
             "textures": {
                 "moon": "assets/textures/moon.jpg",
                 "grass": "assets/textures/default_grass.png",
-                "wood": "assets/textures/wood.jpg",
-                "glass": "assets/textures/glass-panels.png",
-                "monkey": "assets/textures/monkey.png"
+                "grass-top": "assets/textures/grass_block_top.png",
+                "grass-side": "assets/textures/grass_block_side.png",
+                "dirt": "assets/textures/dirt.png",
+                "wood": "assets/textures/Wood.png",
+                "stone": "assets/textures/stone.png",
+                "sand": "assets/textures/sand.png",
+                "clay": "assets/textures/clay.png",
+                "glass": "assets/textures/glass.png",
+                "monkey": "assets/textures/monkey.png",
+                "hearts": "assets/textures/hearts.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
@@ -124,6 +131,50 @@
                     "texture": "grass",
                     "sampler": "pixelated"
                 },
+                "grass-top": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "grass-top",
+                    "sampler": "pixelated"
+                },
+                "grass-side": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "grass-side",
+                    "sampler": "pixelated"
+                },
+                "dirt": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "dirt",
+                    "sampler": "pixelated"
+                },
+                "wood": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": true },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "wood",
+                    "sampler": "pixelated"
+                },
                 "monkey": {
                     "type": "textured",
                     "shader": "textured",
@@ -156,13 +207,15 @@
                     "tint": [1.0, 0.0, 1.0, 1.0]
                 },
                 "stone": {
-                    "type": "tinted",
-                    "shader": "tinted",
+                    "type": "textured",
+                    "shader": "textured",
                     "pipelineState": {
                         "faceCulling": { "enabled": true },
                         "depthTesting": { "enabled": true }
                     },
-                    "tint": [0.5, 0.5, 0.5, 1.0]
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "texture": "stone",
+                    "sampler": "pixelated"
                 },
                 "water": {
                     "type": "tinted",
@@ -180,13 +233,26 @@
                     "tint": [0.2, 0.4, 0.9, 0.8]
                 },
                 "sand": {
-                    "type": "tinted",
-                    "shader": "tinted",
+                    "type": "textured",
+                    "shader": "textured",
                     "pipelineState": {
                         "faceCulling": { "enabled": true },
                         "depthTesting": { "enabled": true }
                     },
-                    "tint": [0.8, 0.8, 0.2, 1.0]
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "texture": "sand",
+                    "sampler": "pixelated"
+                },
+                "clay": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": true },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "texture": "clay",
+                    "sampler": "pixelated"
                 },
                 "sun-material": {
                     "type": "tinted",
@@ -196,6 +262,34 @@
                         "depthTesting": { "enabled": true }
                     },
                     "tint": [1.0, 1.0, 0.8, 1.0]
+                },
+                "wireframe": {
+                    "type": "tinted",
+                    "shader": "tinted",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true, "function": "GL_LEQUAL" },
+                        "polygonMode": "GL_LINE",
+                        "lineWidth": 1.0,
+                        "depthMask": false
+                    },
+                    "tint": [0.0, 0.0, 0.0, 1.0]
+                },
+                "highlight-fill": {
+                    "type": "tinted",
+                    "shader": "tinted",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true, "function": "GL_LEQUAL" },
+                        "blending": {
+                            "enabled": true,
+                            "sourceFactor": "GL_SRC_ALPHA",
+                            "destinationFactor": "GL_ONE_MINUS_SRC_ALPHA"
+                        },
+                        "depthMask": false
+                    },
+                    "transparent": true,
+                    "tint": [0.0, 0.0, 0.0, 0.2]
                 }
             }
         },

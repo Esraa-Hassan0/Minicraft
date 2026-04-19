@@ -237,3 +237,29 @@ void our::mesh_utils::updateChunkMesh(Mesh* mesh, const voxel::Chunk& chunk, con
     auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter, faceCategory);
     mesh->updateBuffers(meshData.vertices, meshData.elements);
 }
+
+our::Mesh* our::mesh_utils::cubeEdges() {
+    std::vector<our::Vertex> vertices = {
+        // Bottom 4 vertices
+        {{-0.5f, -0.5f, -0.5f}, {255, 255, 255, 255}, {0, 0}, {0, 0, 0}},
+        {{ 0.5f, -0.5f, -0.5f}, {255, 255, 255, 255}, {1, 0}, {0, 0, 0}},
+        {{ 0.5f, -0.5f,  0.5f}, {255, 255, 255, 255}, {1, 1}, {0, 0, 0}},
+        {{-0.5f, -0.5f,  0.5f}, {255, 255, 255, 255}, {0, 1}, {0, 0, 0}},
+        // Top 4 vertices
+        {{-0.5f,  0.5f, -0.5f}, {255, 255, 255, 255}, {0, 0}, {0, 0, 0}},
+        {{ 0.5f,  0.5f, -0.5f}, {255, 255, 255, 255}, {1, 0}, {0, 0, 0}},
+        {{ 0.5f,  0.5f,  0.5f}, {255, 255, 255, 255}, {1, 1}, {0, 0, 0}},
+        {{-0.5f,  0.5f,  0.5f}, {255, 255, 255, 255}, {0, 1}, {0, 0, 0}}
+    };
+
+    std::vector<unsigned int> elements = {
+        // Bottom square
+        0, 1, 1, 2, 2, 3, 3, 0,
+        // Top square
+        4, 5, 5, 6, 6, 7, 7, 4,
+        // Vertical edges
+        0, 4, 1, 5, 2, 6, 3, 7
+    };
+
+    return new Mesh(vertices, elements, GL_LINES);
+}

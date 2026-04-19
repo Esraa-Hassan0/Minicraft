@@ -35,4 +35,7 @@ namespace our::mesh_utils {
     // Convenience wrappers that allocate/update Mesh objects from chunk data.
     Mesh* buildChunkMesh(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter = -1, FaceCategory faceCategory = FaceCategory::ALL);
     void updateChunkMesh(Mesh* mesh, const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter = -1, FaceCategory faceCategory = FaceCategory::ALL);
+
+    // Create a mesh that represents just the edges of a cube (for block highlights)
+    Mesh* cubeEdges();
 }

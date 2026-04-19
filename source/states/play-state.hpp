@@ -8,9 +8,9 @@
 #include <systems/movement.hpp>
 #include <systems/player-controller.hpp>
 #include <systems/collision-system.hpp>
-#include <systems/block-interaction.hpp>
 #include <systems/light.hpp>
 #include <systems/time-system.hpp>
+#include <systems/block-interaction.hpp>
 #include <asset-loader.hpp>
 #include <texture/texture2d.hpp>
 #include <voxel/world.hpp>
@@ -40,9 +40,12 @@ class Playstate : public our::State {
     our::MovementSystem movementSystem;
     our::PlayerControllerSystem playerController;
     our::CollisionSystem collisionSystem;
-    our::BlockInteractionSystem blockInteraction;
     our::LightSystem lightSystem;
     our::TimeSystem timeSystem;
+    our::Entity* highlightEntity = nullptr;      // Semi-transparent fill
+    our::Entity* highlightEdgesEntity = nullptr; // Clean square borders
+    our::Mesh* highlightEdgesMesh = nullptr;     // Line-based mesh for borders
+    BlockInteractionSystem blockInteraction;
 
     // Chunk Streaming State
     int chunkLoadRadius = 2;
@@ -100,11 +103,11 @@ class Playstate : public our::State {
     our::Material* getMaterialForBlockType(int blockType) {
         switch (blockType) {
             case voxel::STONE: return our::AssetLoader<our::Material>::get("stone");
-            case voxel::GRASS:
-            case voxel::DIRT:  return our::AssetLoader<our::Material>::get("grass");
+            case voxel::GRASS: return nullptr; // Grass is handled manually per face
+            case voxel::DIRT:  return our::AssetLoader<our::Material>::get("dirt");
             case voxel::SAND:  return our::AssetLoader<our::Material>::get("sand");
             case voxel::WATER: return our::AssetLoader<our::Material>::get("water");
-            case voxel::WOOD:  return our::AssetLoader<our::Material>::get("wood-block");
+            case voxel::WOOD:  return our::AssetLoader<our::Material>::get("wood");
             default:           return our::AssetLoader<our::Material>::get("default");
         }
     }
@@ -129,7 +132,7 @@ class Playstate : public our::State {
     void buildChunkRenderGroup(const std::string& chunkKey, const voxel::Chunk& chunk) {
         ChunkRenderGroup renderGroup;
         const int meshBlockTypes[] = {
-            voxel::STONE, voxel::GRASS, voxel::DIRT, voxel::SAND, 
+            voxel::STONE, voxel::DIRT, voxel::SAND, 
             voxel::WATER, voxel::WOOD, voxel::LEAF, voxel::Diamond, voxel::Glass
         };
 
@@ -152,6 +155,29 @@ class Playstate : public our::State {
             renderGroup.entities.push_back(chunkEntity);
             renderGroup.meshes.push_back(chunkMesh);
         }
+
+        // Handle GRASS blocks manually to support different textures per face
+        auto addGrassFaces = [&](our::mesh_utils::FaceCategory faceCat, const char* matName) {
+            our::Material* material = our::AssetLoader<our::Material>::get(matName);
+            if (!material) return;
+            our::Mesh* chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, voxel::GRASS, faceCat);
+            if (!chunkMesh) return;
+
+            our::Entity* chunkEntity = engineWorld.add();
+            chunkEntity->localTransform.position = chunkOrigin;
+
+            auto* meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
+            meshRenderer->mesh = chunkMesh;
+            meshRenderer->material = material;
+
+            renderGroup.entities.push_back(chunkEntity);
+            renderGroup.meshes.push_back(chunkMesh);
+        };
+
+        addGrassFaces(our::mesh_utils::FaceCategory::TOP, "grass-top");
+        addGrassFaces(our::mesh_utils::FaceCategory::BOTTOM, "dirt");
+        addGrassFaces(our::mesh_utils::FaceCategory::SIDES, "grass-side");
+
         chunkRenderGroups[chunkKey] = std::move(renderGroup);
     }
 
@@ -218,7 +244,7 @@ class Playstate : public our::State {
         our::Texture2D* tex = nullptr;
         ImU32 fallbackColor = IM_COL32(60, 60, 65, 255);
 
-        if(hotbarSlot == 0) { tex = our::AssetLoader<our::Texture2D>::get("grass"); fallbackColor = IM_COL32(72, 130, 58, 255); }
+        if(hotbarSlot == 0) { tex = our::AssetLoader<our::Texture2D>::get("grass-side"); fallbackColor = IM_COL32(72, 130, 58, 255); }
         else if(hotbarSlot == 1) fallbackColor = IM_COL32(115, 77, 51, 255);
         else if(hotbarSlot == 2) { tex = our::AssetLoader<our::Texture2D>::get("wood"); fallbackColor = IM_COL32(130, 85, 48, 255); }
         else if(hotbarSlot == 3) fallbackColor = IM_COL32(118, 118, 118, 255);
@@ -243,9 +269,23 @@ class Playstate : public our::State {
 
         cameraController.enter(getApp());
         playerController.enter(getApp());
-        blockInteraction.enter(getApp());
         timeSystem.initialize(&engineWorld);
         renderer.initialize(getApp()->getFrameBufferSize(), config["renderer"]);
+
+        highlightEntity = engineWorld.add();
+        auto* meshRenderer = highlightEntity->addComponent<our::MeshRendererComponent>();
+        meshRenderer->mesh = our::AssetLoader<our::Mesh>::get("cube");
+        meshRenderer->material = our::AssetLoader<our::Material>::get("highlight-fill");
+        highlightEntity->localTransform.scale = glm::vec3(0.502f); // Slightly larger than a block
+
+        highlightEdgesEntity = engineWorld.add();
+        auto* edgesRenderer = highlightEdgesEntity->addComponent<our::MeshRendererComponent>();
+        highlightEdgesMesh = our::mesh_utils::cubeEdges();
+        edgesRenderer->mesh = highlightEdgesMesh;
+        edgesRenderer->material = our::AssetLoader<our::Material>::get("wireframe");
+        highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f); // Slightly larger than the fill to avoid z-fighting
+
+        blockInteraction.initialize(&engineWorld);
 
         our::Entity* playerEntity = findPlayerEntity();
         if (playerEntity) {
@@ -298,6 +338,31 @@ class Playstate : public our::State {
             ImGui::End();
         }
 
+        // 2. Draw Health
+        our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
+        if (heartsTex) {
+            ImDrawList* fgDl = ImGui::GetForegroundDrawList();
+            float heartSize = 28.0f;
+            float heartGap = 2.0f;
+            float totalW = 10 * heartSize + 9 * heartGap;
+            float startX = displaySize.x * 0.5f - totalW * 0.5f;
+            float invH = 60.0f + 26.0f; // hotbar frame height
+            float startY = displaySize.y - invH - 16.0f - heartSize - 12.0f;
+                
+                ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
+                float texW = 45.0f;
+                float epsilon = 0.5f / texW;
+
+                ImVec2 uv0((27.0f + 0.5f) / texW, 1.0f);
+                ImVec2 uv1((36.0f - 0.5f) / texW, 0.0f);
+
+                for (int i = 0; i < 10; ++i) {
+                    ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
+                    ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
+                    fgDl->AddImage(texID, pMin, pMax, uv0, uv1);
+                }
+            }
+
         // 2. Draw Crosshair
         ImDrawList* drawList = ImGui::GetForegroundDrawList();
         ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
@@ -316,6 +381,8 @@ class Playstate : public our::State {
         lightSystem.update(&engineWorld, (float)deltaTime);
         timeSystem.update(&engineWorld, (float)deltaTime);
 
+        blockInteraction.update((float)deltaTime, &engineWorld);
+        
         auto &mouse = getApp()->getMouse();
         if (playerEntity) {
             glm::mat4 camMat = playerEntity->localTransform.toMat4();
@@ -323,18 +390,39 @@ class Playstate : public our::State {
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
             our::PlayerComponent* player = playerEntity->getComponent<our::PlayerComponent>();
 
+            // Highlight Hovered Block
+            RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
+            if (hoverHit.hit && highlightEntity && highlightEdgesEntity) {
+                glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
+                highlightEntity->localTransform.position = pos;
+                highlightEdgesEntity->localTransform.position = pos;
+            } else {
+                if (highlightEntity) highlightEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+                if (highlightEdgesEntity) highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+            }
+
             // Break Block
             if (mouse.justPressed(0)) {
                 RayHit hit = terrainWorld.castRay(camPos, camDir);
                 if (hit.hit) {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                    if (type == voxel::GRASS || type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Grass.wav");
-                    else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
-                    else our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                    blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
 
-                    if (player) registerCollectedBlock(player, type);
-                    terrainWorld.breakBlock(hit);
-                    terrainMeshDirty = true;
+                    if (blockInteraction.currentHits == 0) {
+                        // The block was completely broken
+                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
+
+                        if (player) registerCollectedBlock(player, type);
+                    } else {
+                        // The block was hit but not broken
+                        if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
+                        else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
+                        else if (type == voxel::SAND) our::AudioSystem::playSound("assets/sounds/Sand.wav");
+                        else if (type == voxel::STONE) our::AudioSystem::playSound("assets/sounds/Stone.wav");
+                        else if (type == voxel::Glass) our::AudioSystem::playSound("assets/sounds/Glass.wav");
+                        else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
+                        else our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                    }
                 }
             }
             // Place Block
@@ -352,6 +440,9 @@ class Playstate : public our::State {
 
         if (terrainMeshDirty) rebuildMesh();
         renderer.render(&engineWorld);
+
+        // Delete particles or hit blocks that have expired outside of chunk builds
+        engineWorld.deleteMarkedEntities();
 
         if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) getApp()->changeState("menu");
     }
@@ -377,8 +468,8 @@ class Playstate : public our::State {
         renderer.destroy();
         cameraController.exit();
         playerController.exit();
-        blockInteraction.exit();
         engineWorld.clear();
+        if (highlightEdgesMesh) delete highlightEdgesMesh;
         our::clearAllAssets();
     }
 };
