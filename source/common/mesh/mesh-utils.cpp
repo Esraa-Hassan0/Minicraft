@@ -168,7 +168,7 @@ our::Mesh* our::mesh_utils::sphere(const glm::ivec2& segments){
     return new our::Mesh(vertices, elements);
 }
 
-our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter) {
+our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter, FaceCategory faceCategory) {
     MeshBuildData meshData;
     meshData.vertices.reserve(4000);
     meshData.elements.reserve(6000);
@@ -185,6 +185,10 @@ our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::
                 int worldZ = chunk.chunkZ * voxel::Chunk::CHUNK_SIZE + z;
 
                 for (int face = 0; face < 6; ++face) {
+                    if (faceCategory == FaceCategory::TOP && face != 2) continue;
+                    if (faceCategory == FaceCategory::BOTTOM && face != 3) continue;
+                    if (faceCategory == FaceCategory::SIDES && (face == 2 || face == 3)) continue;
+
                     int nx = worldX + NEIGHBOR_OFFSETS[face].x;
                     int ny = y + NEIGHBOR_OFFSETS[face].y;
                     int nz = worldZ + NEIGHBOR_OFFSETS[face].z;
@@ -220,16 +224,16 @@ our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::
     return meshData;
 }
 
-our::Mesh* our::mesh_utils::buildChunkMesh(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter) {
-    auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter);
+our::Mesh* our::mesh_utils::buildChunkMesh(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter, FaceCategory faceCategory) {
+    auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter, faceCategory);
     if (meshData.elements.empty()) {
         return nullptr;
     }
     return new Mesh(meshData.vertices, meshData.elements);
 }
 
-void our::mesh_utils::updateChunkMesh(Mesh* mesh, const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter) {
+void our::mesh_utils::updateChunkMesh(Mesh* mesh, const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter, FaceCategory faceCategory) {
     if (!mesh) return;
-    auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter);
+    auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter, faceCategory);
     mesh->updateBuffers(meshData.vertices, meshData.elements);
 }
