@@ -103,8 +103,8 @@
                     "shininess": 128.0
                 },
                 "glass": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true },
@@ -121,8 +121,8 @@
                     "sampler": "pixelated"
                 },
                 "grass": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
@@ -132,8 +132,8 @@
                     "sampler": "pixelated"
                 },
                 "grass-top": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
@@ -143,8 +143,8 @@
                     "sampler": "pixelated"
                 },
                 "grass-side": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
@@ -154,8 +154,8 @@
                     "sampler": "pixelated"
                 },
                 "dirt": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
@@ -165,8 +165,8 @@
                     "sampler": "pixelated"
                 },
                 "wood": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": true },
                         "depthTesting": { "enabled": true }
@@ -176,8 +176,8 @@
                     "sampler": "pixelated"
                 },
                 "monkey": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
@@ -187,8 +187,8 @@
                     "sampler": "default"
                 },
                 "moon": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
@@ -207,8 +207,8 @@
                     "tint": [1.0, 0.0, 1.0, 1.0]
                 },
                 "stone": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": true },
                         "depthTesting": { "enabled": true }
@@ -233,8 +233,8 @@
                     "tint": [0.2, 0.4, 0.9, 0.8]
                 },
                 "sand": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": true },
                         "depthTesting": { "enabled": true }
@@ -244,8 +244,8 @@
                     "sampler": "pixelated"
                 },
                 "clay": {
-                    "type": "textured",
-                    "shader": "textured",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": true },
                         "depthTesting": { "enabled": true }
@@ -295,45 +295,15 @@
         },
         "world": [
             {
-                "position": [0, 0, 0],
-                "rotation": [0, 0, 0],
-                "name": "daylight",
-                "components": [{
-                    "type": "Light",
-                    "lightType": "directional",
-                    "color": [0.95, 0.98, 1.0],
-                    "ambient": [1.0, 0.9, 0.8],
-                    "enabled": true
-                }]
-            },
-            {
-                "position": [0, 0, 0],
-                "rotation": [0, 0, 0],
-                "name": "nightlight",
-                "components": [{
-                    "type": "Light",
-                    "lightType": "directional",
-                    "color": [0.05, 0.05, 0.2],
-                    "ambient": [0.01, 0.01, 0.03],
-                    "enabled": false
-                }]
-            },
-            {
-                "position": [0, 50, -50],
-                "scale": [2.0, 2.0, 2.0],
-                "name": "sun",
+                "name": "Sun",
+                "position": [0, 100, 0],
+                "rotation": [-45, 45, 0],
                 "components": [
                     {
-                        "type": "Mesh Renderer",
-                        "mesh": "cube",
-                        "material": "sun-material"
-                    },
-                    {
                         "type": "Light",
-                        "lightType": "point",
-                        "color": [1.0, 0.95, 0.8],
-                        "ambient": [0.6, 0.6, 0.5],
-                        "attenuation": [1.0, 0.02, 0.001],
+                        "lightType": "directional",
+                        "color": [1.0, 0.95, 0.9],
+                        "ambient": [0.3, 0.3, 0.35],
                         "enabled": true
                     }
                 ]

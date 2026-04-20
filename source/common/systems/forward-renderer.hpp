@@ -9,6 +9,7 @@
 #include <glad/gl.h>
 #include <vector>
 #include <algorithm>
+#include <glm/mat4x4.hpp>
 
 namespace our
 {
@@ -58,6 +59,15 @@ namespace our
         GLuint postprocessFrameBuffer, postProcessVertexArray;
         Texture2D *colorTarget, *depthTarget;
         TexturedMaterial* postprocessMaterial;
+        // Objects used for directional shadow mapping
+        GLuint shadowMapFrameBuffer = 0;
+        Texture2D* shadowDepthTarget = nullptr;
+        Sampler* shadowSampler = nullptr;
+        ShaderProgram* shadowMapShader = nullptr;
+        glm::ivec2 shadowMapSize = glm::ivec2(2048, 2048);
+        glm::mat4 lightSpaceMatrix = glm::mat4(1.0f);
+        glm::vec3 shadowLightDirection = glm::vec3(0.0f, -1.0f, 0.0f);
+        bool shadowsEnabled = false;
     glm::vec3 sunScreenPosition;
         glm::vec3 sunColor;
         float sunIntensity;

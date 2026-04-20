@@ -18,6 +18,7 @@ out Varyings {
     vec3 fragPos;    // World-space position
     vec3 normal;     // World-space normal
     vec2 texcoord;   // Texture coordinates
+    vec4 fragPosLightSpace; // Position in directional light clip space
 } vs_out;
 
 // Uniforms:
@@ -27,6 +28,7 @@ out Varyings {
 uniform mat4 transform;
 uniform mat4 model;
 uniform mat3 normalMatrix;
+uniform mat4 lightSpaceMatrix;
 
 void main() {
     // Transform position to world space (for light calculations)
@@ -39,6 +41,9 @@ void main() {
 
     // Pass texture coordinates to fragment shader
     vs_out.texcoord = tex_coord;
+
+    // Used by the fragment shader to sample the directional shadow map
+    vs_out.fragPosLightSpace = lightSpaceMatrix * worldPos;
 
     // Transform to clip space for rendering
     gl_Position = transform * vec4(position, 1.0);

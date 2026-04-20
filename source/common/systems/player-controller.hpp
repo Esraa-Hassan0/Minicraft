@@ -160,10 +160,8 @@ namespace our {
                 } else if (keyboard.isPressed(GLFW_KEY_LEFT_CONTROL) || keyboard.isPressed(GLFW_KEY_RIGHT_CONTROL)) {
                     player->velocity.y = -player->swimDownSpeed;
                 } else {
-                    // Make entering water feel like diving: gently sink by default.
-                    // Gravity still applies in CollisionSystem, but this guarantees descent
-                    // even when reduced water gravity is too weak to notice.
-                    player->velocity.y = glm::min(player->velocity.y, -player->swimDownSpeed * 0.5f);
+                    // Passive underwater behavior: sink steadily unless the player actively swims up.
+                    player->velocity.y = -player->swimDownSpeed * 0.75f;
                 }
             }
         }

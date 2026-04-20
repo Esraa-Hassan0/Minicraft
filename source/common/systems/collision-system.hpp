@@ -48,6 +48,19 @@ namespace our {
                     // Apply gravity (reduced when underwater)
                     float gravityMult = player->isUnderwater ? player->waterGravityMultiplier : 1.0f;
                     player->velocity.y -= player->gravityAcceleration * gravityMult * deltaTime;
+
+                    if (player->isUnderwater) {
+                        // Water drag for Minecraft-like movement feel.
+                        float horizontalDrag = glm::max(0.0f, 1.0f - 3.0f * deltaTime);
+                        player->velocity.x *= horizontalDrag;
+                        player->velocity.z *= horizontalDrag;
+
+                        // Keep sinking speed controlled while still allowing diving.
+                        float maxSinkSpeed = player->swimDownSpeed * 1.35f;
+                        if (player->velocity.y < -maxSinkSpeed) {
+                            player->velocity.y = -maxSinkSpeed;
+                        }
+                    }
                     
                     // Cap falling speed to prevent instability
                     const float maxFallSpeed = 50.0f;

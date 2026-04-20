@@ -29,6 +29,7 @@ namespace our
         LightComponent *sunLight;
         LightComponent *dayLight;
         LightComponent *nightLight;
+        bool dynamicCycleEnabled;
 
     public:
         void initialize(World *world, float dayDuration = 120.0f);

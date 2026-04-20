@@ -24,10 +24,11 @@ namespace our
         sunLight = nullptr;
         dayLight = nullptr;
         nightLight = nullptr;
+        dynamicCycleEnabled = true;
 
         for (auto entity : world->getEntities())
         {
-            if (entity->name == "sun")
+            if (entity->name == "sun" || entity->name == "Sun")
             {
                 sunEntity = entity;
                 sunLight = entity->getComponent<LightComponent>();
@@ -43,10 +44,16 @@ namespace our
                 nightLight = entity->getComponent<LightComponent>();
             }
         }
+
+        // If no legacy day/night entities are present, keep the configured sun static.
+        dynamicCycleEnabled = (dayLightEntity != nullptr || nightLightEntity != nullptr);
     }
 
     void TimeSystem::update(World *world, float deltaTime)
     {
+        if (!dynamicCycleEnabled)
+            return;
+
         currentTime += deltaTime / dayDuration;
         if (currentTime >= 1.0f)
             currentTime -= 1.0f;

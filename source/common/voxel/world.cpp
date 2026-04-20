@@ -52,6 +52,22 @@ void World::generateChunk(int chunkX, int chunkZ) {
         ChunkType type = get_chunk_type_for_coordinates(chunkX, chunkZ);
         activeChunks.emplace(key, Chunk(chunkX, chunkZ, height, type));
         activeChunks.at(key).generate(waterLevel, stoneLevel);
+
+        // Rebuild already-loaded neighbors so chunk-edge faces disappear when the new
+        // chunk provides the missing adjacent blocks.
+        const int neighbors[4][2] = {
+            {-1, 0},
+            { 1, 0},
+            { 0,-1},
+            { 0, 1}
+        };
+        for (const auto& n : neighbors) {
+            std::string neighborKey = std::to_string(chunkX + n[0]) + "_" + std::to_string(chunkZ + n[1]);
+            auto it = activeChunks.find(neighborKey);
+            if (it != activeChunks.end()) {
+                it->second.isDirty = true;
+            }
+        }
     }
 }
 

@@ -1,146 +1,155 @@
 #version 330 core
 
-// Maximum number of lights supported per draw call.
-// This is a compile-time constant. Increase if more lights needed.
-// Note: More lights = more GPU processing per fragment.
 #define MAX_LIGHTS 8
 
-// Light data structure matching ForwardRenderer's LightData.
-// Each light is uploaded as a uniform array element.
 struct Light {
-    int type;           // 0=directional, 1=point, 2=spot
-    vec3 position;      // World position (for point/spot lights)
-    vec3 direction;    // Direction (for directional/spot cone axis)
-    vec3 color;        // Diffuse/specular color
-    vec3 ambient;      // Ambient contribution
-    float attenConstant;  // Distance attenuation constant term
-    float attenLinear;     // Distance attenuation linear term
-    float attenQuadratic;  // Distance attenuation quadratic term
-    float innerCutoff;     // Cosine of inner spot angle (bright core)
-    float outerCutoff;     // Cosine of outer spot angle (edge)
+    int type;
+    vec3 position;
+    vec3 direction;
+    vec3 color;
+    vec3 ambient;
+    float attenConstant;
+    float attenLinear;
+    float attenQuadratic;
+    float innerCutoff;
+    float outerCutoff;
 };
 
-// Inputs from vertex shader:
-// fragPos: World-space fragment position (for distance/attenuation)
-// normal: World-space surface normal (for diffuse/specular)
-// texcoord: Texture coordinates (for albedo/specular maps)
 in Varyings {
     vec3 fragPos;
     vec3 normal;
     vec2 texcoord;
+    vec4 fragPosLightSpace;
 } fs_in;
 
-// Material texture samplers:
-// albedoTex (unit 0): Diffuse/albedo map
-// specularTex (unit 1): Specular intensity map (grayscale)
 uniform sampler2D albedoTex;
 uniform sampler2D specularTex;
+uniform sampler2D shadowMap;
 
-// Material properties:
-uniform float shininess;      // Phong shininess exponent (higher = smaller specular highlight)
-uniform vec3 cameraPos;   // World-space camera position (for view direction)
+uniform float shininess;
+uniform vec3 cameraPos;
 
-// Light array uniform block:
-// numLights: Number of active lights this frame
-// lights: Array of Light structs (up to MAX_LIGHTS)
 uniform int numLights;
 uniform Light lights[MAX_LIGHTS];
+uniform int enableShadows;
+uniform vec3 shadowLightDir;
 
-// Visual feedback uniforms (damage flash effect):
-uniform vec3 flashColor;    // Color to flash when damaged
-uniform float flashStrength; // 0.0 = no flash, 1.0 = full flash
+uniform vec3 flashColor;
+uniform float flashStrength;
 
-// Base tint from tinted material (modulates entire output)
 uniform vec4 tint;
 
-// Output to framebuffer
 out vec4 fragColor;
 
-// Calculates Blinn-Phong lighting contribution from a single light.
-// L: Light data
-// N: Surface normal (normalized)
-// V: View direction (normalized)
-// albedo: Surface diffuse color
-// spec: Surface specular color
-// Returns: Combined ambient + diffuse + specular contribution
-vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
-    vec3 lightDir;      // Direction from surface to light
-    float attenuation = 1.0;  // Distance-based falloff
+float calcDirectionalShadow(vec4 fragPosLightSpace, vec3 N, vec3 lightDir)
+{
+    vec3 projCoords = fragPosLightSpace.xyz / max(fragPosLightSpace.w, 0.0001);
+    projCoords = projCoords * 0.5 + 0.5;
 
-    // Compute light direction and attenuation based on light type
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+    {
+        return 0.0;
+    }
+
+    float bias = max(0.0015 * (1.0 - max(dot(N, lightDir), 0.0)), 0.0004);
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+
+    float shadow = 0.0;
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(float(x), float(y)) * texelSize).r;
+            shadow += (projCoords.z - bias > pcfDepth) ? 1.0 : 0.0;
+        }
+    }
+
+    return shadow / 9.0;
+}
+
+vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec, float directionalShadow)
+{
+    vec3 lightDir;
+    float attenuation = 1.0;
+    float shadowTerm = 0.0;
+
     if (L.type == 0) {
-        // Directional light (sun-like)
-        // Light rays are parallel, pointing in -direction
         lightDir = normalize(-L.direction);
+        shadowTerm = directionalShadow;
     } else {
-        // Point or spot light
-        // Vector from surface to light position
         vec3 delta = L.position - fs_in.fragPos;
         float dist = length(delta);
         lightDir = delta / dist;
-
-        // Physical distance attenuation:
-        // intensity = 1 / (c + l*d + q*d^2)
         attenuation = 1.0 / (L.attenConstant
                             + L.attenLinear * dist
                             + L.attenQuadratic * dist * dist);
 
-        // Spot light cone attenuation
         if (L.type == 2) {
-            // Direction that spotlight is pointing (opposite of stored direction)
             vec3 spotDir = normalize(-L.direction);
-            // Angle between light-to-surface and spotlight direction
             float theta = dot(lightDir, spotDir);
-            // Smooth falloff between inner and outer cutoff (cosine values)
             float epsilon = L.innerCutoff - L.outerCutoff;
-            // Within cone: theta > outerCutoff, full intensity at innerCutoff
             attenuation *= clamp((theta - L.outerCutoff) / epsilon, 0.0, 1.0);
         }
     }
 
-    // Blinn-Phong halfway vector (midpoint between view and light)
     vec3 H = normalize(lightDir + V);
-
-    // Diffuse: how much light hits the surface
     float diff = max(dot(N, lightDir), 0.0);
-
-    // Specular: reflection intensity
     float specular = pow(max(dot(N, H), 0.0), shininess);
 
-    // Combine lighting terms
     vec3 ambientC = L.ambient * albedo;
-    vec3 diffuseC = L.color * diff * albedo * attenuation;
-    vec3 specularC = L.color * specular * spec * attenuation;
+    vec3 diffuseC = L.color * diff * albedo * attenuation * (1.0 - shadowTerm);
+    vec3 specularC = L.color * specular * spec * attenuation * (1.0 - shadowTerm);
 
     return ambientC + diffuseC + specularC;
 }
 
-// Main fragment shader entry point.
 void main() {
-    // Sample textures
     vec4 albedoSample = texture(albedoTex, fs_in.texcoord) * tint;
     vec3 specSample = texture(specularTex, fs_in.texcoord).rgb;
 
-    // Normalize interpolated normal
     vec3 N = normalize(fs_in.normal);
-
-    // View direction: camera to fragment
     vec3 V = normalize(cameraPos - fs_in.fragPos);
 
-    // Accumulate lighting from all active lights
+    float directionalShadow = 0.0;
+    if (enableShadows != 0)
+    {
+        vec3 lightDir = normalize(-shadowLightDir);
+        directionalShadow = calcDirectionalShadow(fs_in.fragPosLightSpace, N, lightDir);
+    }
+
     vec3 result = vec3(0.0);
     if (numLights > 0) {
         for (int i = 0; i < numLights && i < MAX_LIGHTS; i++) {
-            result += calcLight(lights[i], N, V, albedoSample.rgb, specSample);
+            float perLightShadow = 0.0;
+            if (enableShadows != 0 && lights[i].type == 0)
+            {
+                float dirSimilarity = dot(normalize(lights[i].direction), normalize(shadowLightDir));
+                if (dirSimilarity > 0.999)
+                {
+                    perLightShadow = directionalShadow;
+                }
+            }
+
+            result += calcLight(lights[i], N, V, albedoSample.rgb, specSample, perLightShadow);
         }
     } else {
-        result = albedoSample.rgb * vec3(0.1);
+        result = albedoSample.rgb * vec3(0.05);
     }
 
-    // Apply damage flash effect (blend if active)
-    // Mix normal result with flash color based on flashStrength
+    float ao = 1.0;
+    if (N.y < 0.5) ao = 0.7;
+    if (N.y < -0.5) ao = 0.4;
+    result *= ao;
+
+    if (albedoSample.a < 0.99) {
+        vec3 deepWaterColor = vec3(0.05, 0.2, 0.5);
+        result = mix(result, deepWaterColor, 0.6);
+        albedoSample.a = max(albedoSample.a, 0.6);
+    }
+
     result = mix(result, flashColor * albedoSample.rgb, flashStrength);
 
-    // Output final color with original alpha
+    if (albedoSample.a < 0.1) discard;
+
     fragColor = vec4(result, albedoSample.a);
 }
