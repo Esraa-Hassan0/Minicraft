@@ -35,7 +35,7 @@ namespace our {
         // Movement & Physics
         glm::vec3 velocity = glm::vec3(0.0f);
         float speed = 5.0f; // Movement speed in units/second
-        float jumpForce = 10.0f; // Initial vertical velocity when jumping
+        float jumpForce = 8.0f; // Initial vertical velocity when jumping
         float gravityAcceleration = 20.0f; // Gravity acceleration
         bool isGrounded = false;
         

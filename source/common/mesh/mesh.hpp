@@ -21,10 +21,12 @@ namespace our
         unsigned int VAO;
         // We need to remember the number of elements that will be draw by glDrawElements
         GLsizei elementCount;
+        // Primitive mode used by glDrawElements
+        GLenum drawingMode;
 
     public:
         // the dynamic constructor that initializes the mesh from the given vertices and elements   
-        Mesh() 
+        Mesh(GLenum drawingMode = GL_TRIANGLES) : drawingMode(drawingMode)
         {
             elementCount = 0;
 
@@ -59,7 +61,8 @@ namespace our
         // a vertex buffer to store the vertex data on the VRAM,
         // an element buffer to store the element data on the VRAM,
         // a vertex array object to define how to read the vertex & element buffer during rendering
-        Mesh(const std::vector<Vertex> &vertices, const std::vector<unsigned int> &elements)
+        Mesh(const std::vector<Vertex> &vertices, const std::vector<unsigned int> &elements, GLenum drawingMode = GL_TRIANGLES)
+            : drawingMode(drawingMode)
         {
             // TODO: (Req 2) Write this function
             //  remember to store the number of elements in "elementCount" since you will need it for drawing
@@ -111,7 +114,7 @@ namespace our
                                     // which EBO to use
                                     // how vertex attributes are laid out
                                     // So this single line restores everything needed to draw.
-            glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_INT, nullptr);
+            glDrawElements(drawingMode, elementCount, GL_UNSIGNED_INT, nullptr);
             // GL_UNSIGNED_INT => Type of indices in the EBO
             // nullptr => Offset inside EBO
             // nullptr = start from beginning

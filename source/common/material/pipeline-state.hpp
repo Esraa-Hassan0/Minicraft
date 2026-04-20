@@ -37,6 +37,8 @@ namespace our {
         glm::bvec4 colorMask = {true, true, true, true}; // To know how to use it, check glColorMask
         bool depthMask = true; // To know how to use it, check glDepthMask
 
+        GLenum polygonMode = GL_FILL;
+        float lineWidth = 1.0f;
 
         // This function should set the OpenGL options to the values specified by this structure
         // For example, if faceCulling.enabled is true, you should call glEnable(GL_CULL_FACE), otherwise, you should call glDisable(GL_CULL_FACE)
@@ -67,6 +69,8 @@ namespace our {
 
         glColorMask(colorMask.r, colorMask.g, colorMask.b, colorMask.a);
         glDepthMask(depthMask);
+        glPolygonMode(GL_FRONT_AND_BACK, polygonMode);
+        glLineWidth(lineWidth);
         };
 
         // Given a json object, this function deserializes a PipelineState structure
