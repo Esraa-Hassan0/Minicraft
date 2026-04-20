@@ -18,8 +18,12 @@ void Chunk::generate(int waterLevel, int stoneLevel) {
             float hills = std::sin(worldX * 0.2f) + std::cos(worldZ * 0.2f);
             int grassSurface = waterLevel + 1 + static_cast<int>(hills * 2.0f);
             int desertSurface = waterLevel + 2 + static_cast<int>(hills * 1.5f);
-            int seaFloor = waterLevel - 2 + static_cast<int>(hills * 1.0f);
-            seaFloor = std::max(stoneLevel, std::min(waterLevel - 1, seaFloor));
+            // Keep sea biomes deep enough for actual diving gameplay.
+            // With low water levels, clamping to waterLevel-1 makes water only 1 block deep.
+            int seaFloor = waterLevel - 3 + static_cast<int>(hills * 1.0f);
+            int maxSeaFloor = waterLevel - 2; // guarantees at least 2 blocks of water column
+            if (maxSeaFloor < stoneLevel) maxSeaFloor = stoneLevel;
+            seaFloor = std::max(stoneLevel, std::min(maxSeaFloor, seaFloor));
             
             for (int y = 0 ; y < height; ++y) {
                 if (y < stoneLevel) {

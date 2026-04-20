@@ -44,6 +44,19 @@ namespace our {
         int blockPlacementCooldown = 150; // Milliseconds between block placements
         int timeSinceLastPlacement = 0;
 
+        // Underwater state
+        bool isUnderwater = false;
+        float waterDamageInterval = 2.0f;
+        float waterDamageTimer = 0.0f;
+        float waterDamageAmount = 10.0f;
+        float waterSpeedMultiplier = 0.6f;
+        float waterGravityMultiplier = 0.3f;
+        float swimUpSpeed = 4.0f;
+        float swimDownSpeed = 3.0f;
+        float waterJumpMultiplier = 1.5f;
+
+        float waterAmbientTimer = 0.0f;
+
         // Game outcome
         GameState gameState = GameState::PLAYING;
 
@@ -63,6 +76,14 @@ namespace our {
             
             interactionRange = data.value("interactionRange", interactionRange);
             blockPlacementCooldown = data.value("blockPlacementCooldown", blockPlacementCooldown);
+
+            waterDamageInterval = data.value("waterDamageInterval", waterDamageInterval);
+            waterDamageAmount = data.value("waterDamageAmount", waterDamageAmount);
+            waterSpeedMultiplier = data.value("waterSpeedMultiplier", waterSpeedMultiplier);
+            waterGravityMultiplier = data.value("waterGravityMultiplier", waterGravityMultiplier);
+            swimUpSpeed = data.value("swimUpSpeed", swimUpSpeed);
+            swimDownSpeed = data.value("swimDownSpeed", swimDownSpeed);
+            waterJumpMultiplier = data.value("waterJumpMultiplier", waterJumpMultiplier);
         }
     };
 }

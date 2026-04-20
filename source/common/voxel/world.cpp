@@ -132,7 +132,8 @@ RayHit World::castRay(glm::vec3 start, glm::vec3 direction, float maxDistance) c
         int gridZ = static_cast<int>(std::floor(currentPos.z));
 
         // If we hit a solid block
-        if (getBlock(gridX, gridY, gridZ) != AIR) {
+        int hitBlockType = getBlock(gridX, gridY, gridZ);
+        if (hitBlockType != AIR && hitBlockType != WATER) {
             result.hit = true;
             result.x = gridX;
             result.y = gridY;

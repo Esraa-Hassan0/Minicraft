@@ -286,6 +286,8 @@ class Playstate : public our::State {
         highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f); // Slightly larger than the fill to avoid z-fighting
 
         blockInteraction.initialize(&engineWorld);
+        our::AudioSystem::startLoopingSound("water_ambient", "assets/sounds/water_flowing.wav");
+        our::AudioSystem::setLoopingSoundVolume("water_ambient", 0.0f);
 
         our::Entity* playerEntity = findPlayerEntity();
         if (playerEntity) {
@@ -344,24 +346,38 @@ class Playstate : public our::State {
             ImDrawList* fgDl = ImGui::GetForegroundDrawList();
             float heartSize = 28.0f;
             float heartGap = 2.0f;
-            float totalW = 10 * heartSize + 9 * heartGap;
+            float maxHearts = 10;
+            float totalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
             float startX = displaySize.x * 0.5f - totalW * 0.5f;
             float invH = 60.0f + 26.0f; // hotbar frame height
             float startY = displaySize.y - invH - 16.0f - heartSize - 12.0f;
                 
-                ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
-                float texW = 45.0f;
-                float epsilon = 0.5f / texW;
+            ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
+            float texW = 45.0f;
 
-                ImVec2 uv0((27.0f + 0.5f) / texW, 1.0f);
-                ImVec2 uv1((36.0f - 0.5f) / texW, 0.0f);
+            int fullHearts = static_cast<int>(player->health / 10.0f);
+            float partialHeart = (player->health / 10.0f) - fullHearts;
 
-                for (int i = 0; i < 10; ++i) {
-                    ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
-                    ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
-                    fgDl->AddImage(texID, pMin, pMax, uv0, uv1);
+            ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
+            ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
+            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
+            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
+
+            for (int i = 0; i < maxHearts; ++i) {
+                ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
+                ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
+                if (i < fullHearts) {
+                    fgDl->AddImage(texID, pMin, pMax, uvFull0, uvFull1);
+                } else if (i == fullHearts && partialHeart > 0.0f) {
+                    ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
+                    ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
+                    fgDl->AddImage(texID, pMin, splitX, uvFull0, uvFull1);
+                    fgDl->AddImage(texID, splitX1, pMax, uvEmpty0, uvEmpty1);
+                } else {
+                    fgDl->AddImage(texID, pMin, pMax, uvEmpty0, uvEmpty1);
                 }
             }
+        }
 
         // 2. Draw Crosshair
         ImDrawList* drawList = ImGui::GetForegroundDrawList();
@@ -382,6 +398,65 @@ class Playstate : public our::State {
         timeSystem.update(&engineWorld, (float)deltaTime);
 
         blockInteraction.update((float)deltaTime, &engineWorld);
+
+        // Handle water damage
+        our::PlayerComponent* player = nullptr;
+        if (playerEntity) {
+            player = playerEntity->getComponent<our::PlayerComponent>();
+        }
+        if (player) {
+            float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
+            our::AudioSystem::setGlobalVolume(targetVolume);
+
+            if (player->isUnderwater) {
+                player->waterDamageTimer += (float)deltaTime;
+                while (player->waterDamageTimer >= player->waterDamageInterval) {
+                    player->health -= player->waterDamageAmount;
+                    player->waterDamageTimer -= player->waterDamageInterval;
+                    
+                    if (player->health <= 0.0f) {
+                        player->health = 0.0f;
+                        player->isAlive = false;
+                        player->gameState = our::GameState::LOSE;
+                        break;
+                    }
+                }
+            } else if (player->waterDamageTimer > 0.0f) {
+                player->waterDamageTimer = 0.0f;
+            }
+
+            // Dynamic ambient sound based on distance to nearest water
+            float maxRadius = 10.0f;
+            float minDistanceSq = maxRadius * maxRadius;
+            bool waterFound = false;
+
+            glm::vec3 pos = playerEntity->localTransform.position;
+            int ix = static_cast<int>(std::floor(pos.x));
+            int iy = static_cast<int>(std::floor(pos.y));
+            int iz = static_cast<int>(std::floor(pos.z));
+
+            for (int dx = -6; dx <= 6; ++dx) {
+                for (int dy = -3; dy <= 3; ++dy) {
+                    for (int dz = -6; dz <= 6; ++dz) {
+                        if (terrainWorld.getBlock(ix + dx, iy + dy, iz + dz) == voxel::WATER) {
+                            float distSq = (float)(dx*dx + dy*dy + dz*dz);
+                            if (distSq < minDistanceSq) {
+                                minDistanceSq = distSq;
+                                waterFound = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            float volume = 0.0f;
+            if (waterFound) {
+                float distance = std::sqrt(minDistanceSq);
+                volume = 1.0f - (distance / maxRadius);
+                if (volume < 0.0f) volume = 0.0f;
+            }
+            our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
+        }
         
         auto &mouse = getApp()->getMouse();
         if (playerEntity) {
@@ -401,8 +476,8 @@ class Playstate : public our::State {
                 if (highlightEdgesEntity) highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
             }
 
-            // Break Block
-            if (mouse.justPressed(0)) {
+            // Break Block (disabled underwater)
+            if (mouse.justPressed(0) && player && !player->isUnderwater) {
                 RayHit hit = terrainWorld.castRay(camPos, camDir);
                 if (hit.hit) {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
@@ -425,8 +500,8 @@ class Playstate : public our::State {
                     }
                 }
             }
-            // Place Block
-            if (mouse.justPressed(1) && player) {
+            // Place Block (disabled underwater)
+            if (mouse.justPressed(1) && player && !player->isUnderwater) {
                 RayHit hit = terrainWorld.castRay(camPos, camDir);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
                 int* stack = inventoryCountForType(player, placeType);
@@ -463,6 +538,7 @@ class Playstate : public our::State {
     }
 
     void onDestroy() override {
+        our::AudioSystem::stopLoopingSound("water_ambient");
         clearAllChunkRenderGroups();
         engineWorld.deleteMarkedEntities();
         renderer.destroy();
