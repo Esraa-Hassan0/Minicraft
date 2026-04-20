@@ -55,6 +55,10 @@ namespace our {
         float swimDownSpeed = 3.0f;
         float waterJumpMultiplier = 1.5f;
 
+        // Flight state
+        bool isFlying = false;
+        float flySpeed = 6.0f;
+
         // Game outcome
         GameState gameState = GameState::PLAYING;
 
@@ -82,6 +86,7 @@ namespace our {
             swimUpSpeed = data.value("swimUpSpeed", swimUpSpeed);
             swimDownSpeed = data.value("swimDownSpeed", swimDownSpeed);
             waterJumpMultiplier = data.value("waterJumpMultiplier", waterJumpMultiplier);
+            flySpeed = data.value("flySpeed", flySpeed);
         }
     };
 }

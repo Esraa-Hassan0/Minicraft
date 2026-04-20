@@ -147,10 +147,20 @@ namespace our {
             player->velocity.x = currentMovement.x;
             player->velocity.z = currentMovement.z;
 
-            // Handle sprinting with shift key (only when not underwater)
-            if (keyboard.isPressed(GLFW_KEY_LEFT_SHIFT) && !player->isUnderwater) {
+            // Handle sprinting with shift key (only when not underwater and not flying)
+            bool holdingUp = keyboard.isPressed(GLFW_KEY_UP);
+            if (keyboard.isPressed(GLFW_KEY_LEFT_SHIFT) && !player->isUnderwater && !holdingUp) {
                 player->velocity.x *= 1.5f;
                 player->velocity.z *= 1.5f;
+            }
+
+            // Handle flight (Shift + Up Arrow)
+            if (keyboard.isPressed(GLFW_KEY_LEFT_SHIFT) && holdingUp) {
+                player->isFlying = true;
+                player->velocity.y = player->flySpeed;
+                player->isGrounded = false;
+            } else {
+                player->isFlying = false;
             }
 
             // Handle swimming up/down when underwater
@@ -160,9 +170,6 @@ namespace our {
                 } else if (keyboard.isPressed(GLFW_KEY_LEFT_CONTROL) || keyboard.isPressed(GLFW_KEY_RIGHT_CONTROL)) {
                     player->velocity.y = -player->swimDownSpeed;
                 } else {
-                    // Make entering water feel like diving: gently sink by default.
-                    // Gravity still applies in CollisionSystem, but this guarantees descent
-                    // even when reduced water gravity is too weak to notice.
                     player->velocity.y = glm::min(player->velocity.y, -player->swimDownSpeed * 0.5f);
                 }
             }

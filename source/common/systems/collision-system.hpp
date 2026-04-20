@@ -41,9 +41,12 @@ namespace our {
                         player->isUnderwater = inWater;
                     }
 
-                    // Apply gravity (reduced when underwater)
-                    float gravityMult = player->isUnderwater ? player->waterGravityMultiplier : 1.0f;
-                    player->velocity.y -= player->gravityAcceleration * gravityMult * deltaTime;
+                    // Apply gravity (reduced when underwater, skipped when flying)
+                    float gravityMult = 1.0f;
+                    if (!player->isFlying) {
+                        gravityMult = player->isUnderwater ? player->waterGravityMultiplier : 1.0f;
+                        player->velocity.y -= player->gravityAcceleration * gravityMult * deltaTime;
+                    }
                     
                     // Cap falling speed to prevent instability
                     const float maxFallSpeed = 50.0f;
