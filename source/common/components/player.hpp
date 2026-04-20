@@ -55,6 +55,8 @@ namespace our {
         float swimDownSpeed = 3.0f;
         float waterJumpMultiplier = 1.5f;
 
+        float waterAmbientTimer = 0.0f;
+
         // Game outcome
         GameState gameState = GameState::PLAYING;
 

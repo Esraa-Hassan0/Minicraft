@@ -4,6 +4,7 @@
 #include "../components/aabb-collider.hpp"
 #include "../components/player.hpp"
 #include "../voxel/world.hpp"
+#include "../audio/audio.hpp"
 #include <glm/glm.hpp>
 
 namespace our {
@@ -37,6 +38,9 @@ namespace our {
                                     }
                                 }
                             }
+                        }
+                        if (inWater && !player->isUnderwater) {
+                            our::AudioSystem::playSound("assets/sounds/Splash.wav");
                         }
                         player->isUnderwater = inWater;
                     }
@@ -190,7 +194,7 @@ namespace our {
                                 int minZ = static_cast<int>(std::floor(minCorner.z));
                                 int maxZ = static_cast<int>(std::floor(maxCorner.z));
 
-for (int x = minX; x <= maxX; ++x) {
+                            for (int x = minX; x <= maxX; ++x) {
                                      for (int y = minY; y <= maxY; ++y) {
                                          for (int z = minZ; z <= maxZ; ++z) {
                                              int blockType = terrain->getBlock(x, y, z);

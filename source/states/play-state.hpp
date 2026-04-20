@@ -286,6 +286,8 @@ class Playstate : public our::State {
         highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f); // Slightly larger than the fill to avoid z-fighting
 
         blockInteraction.initialize(&engineWorld);
+        our::AudioSystem::startLoopingSound("water_ambient", "assets/sounds/water_flowing.wav");
+        our::AudioSystem::setLoopingSoundVolume("water_ambient", 0.0f);
 
         our::Entity* playerEntity = findPlayerEntity();
         if (playerEntity) {
@@ -338,7 +340,7 @@ class Playstate : public our::State {
             ImGui::End();
         }
 
-// 2. Draw Health
+        // 2. Draw Health
         our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
         if (heartsTex) {
             ImDrawList* fgDl = ImGui::GetForegroundDrawList();
@@ -403,6 +405,9 @@ class Playstate : public our::State {
             player = playerEntity->getComponent<our::PlayerComponent>();
         }
         if (player) {
+            float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
+            our::AudioSystem::setGlobalVolume(targetVolume);
+
             if (player->isUnderwater) {
                 player->waterDamageTimer += (float)deltaTime;
                 while (player->waterDamageTimer >= player->waterDamageInterval) {
@@ -419,6 +424,38 @@ class Playstate : public our::State {
             } else if (player->waterDamageTimer > 0.0f) {
                 player->waterDamageTimer = 0.0f;
             }
+
+            // Dynamic ambient sound based on distance to nearest water
+            float maxRadius = 10.0f;
+            float minDistanceSq = maxRadius * maxRadius;
+            bool waterFound = false;
+
+            glm::vec3 pos = playerEntity->localTransform.position;
+            int ix = static_cast<int>(std::floor(pos.x));
+            int iy = static_cast<int>(std::floor(pos.y));
+            int iz = static_cast<int>(std::floor(pos.z));
+
+            for (int dx = -6; dx <= 6; ++dx) {
+                for (int dy = -3; dy <= 3; ++dy) {
+                    for (int dz = -6; dz <= 6; ++dz) {
+                        if (terrainWorld.getBlock(ix + dx, iy + dy, iz + dz) == voxel::WATER) {
+                            float distSq = (float)(dx*dx + dy*dy + dz*dz);
+                            if (distSq < minDistanceSq) {
+                                minDistanceSq = distSq;
+                                waterFound = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            float volume = 0.0f;
+            if (waterFound) {
+                float distance = std::sqrt(minDistanceSq);
+                volume = 1.0f - (distance / maxRadius);
+                if (volume < 0.0f) volume = 0.0f;
+            }
+            our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
         }
         
         auto &mouse = getApp()->getMouse();
@@ -501,6 +538,7 @@ class Playstate : public our::State {
     }
 
     void onDestroy() override {
+        our::AudioSystem::stopLoopingSound("water_ambient");
         clearAllChunkRenderGroups();
         engineWorld.deleteMarkedEntities();
         renderer.destroy();
