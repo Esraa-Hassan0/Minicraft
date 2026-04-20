@@ -22,8 +22,28 @@ namespace our {
                 PlayerComponent* player = entity->getComponent<PlayerComponent>();
 
                 if (collider && player) {
-                    // Apply gravity
-                    player->velocity.y -= player->gravityAcceleration * deltaTime;
+                    // Detect if player will be underwater this frame
+                    if (terrain) {
+                        glm::vec3 checkPos = entity->localTransform.position + player->velocity * deltaTime;
+                        glm::vec3 colliderMin = collider->getMinCorner(checkPos);
+                        glm::vec3 colliderMax = collider->getMaxCorner(checkPos);
+                        
+                        bool inWater = false;
+                        for (int cx = static_cast<int>(std::floor(colliderMin.x)); cx <= static_cast<int>(std::floor(colliderMax.x)) && !inWater; ++cx) {
+                            for (int cy = static_cast<int>(std::floor(colliderMin.y)); cy <= static_cast<int>(std::floor(colliderMax.y)) && !inWater; ++cy) {
+                                for (int cz = static_cast<int>(std::floor(colliderMin.z)); cz <= static_cast<int>(std::floor(colliderMax.z)) && !inWater; ++cz) {
+                                    if (terrain->getBlock(cx, cy, cz) == voxel::WATER) {
+                                        inWater = true;
+                                    }
+                                }
+                            }
+                        }
+                        player->isUnderwater = inWater;
+                    }
+
+                    // Apply gravity (reduced when underwater)
+                    float gravityMult = player->isUnderwater ? player->waterGravityMultiplier : 1.0f;
+                    player->velocity.y -= player->gravityAcceleration * gravityMult * deltaTime;
                     
                     // Cap falling speed to prevent instability
                     const float maxFallSpeed = 50.0f;
@@ -63,7 +83,8 @@ namespace our {
                         for (int x = minX; x <= maxX; ++x) {
                             for (int y = minY; y <= maxY; ++y) {
                                 for (int z = minZ; z <= maxZ; ++z) {
-                                    if (terrain->getBlock(x, y, z) != 0) { // Air is 0
+                                    int blockType = terrain->getBlock(x, y, z);
+                                    if (blockType != 0 && blockType != voxel::WATER) { // Air is 0, WATER is non-solid
                                         AABBColliderComponent blockCollider;
                                         blockCollider.center = glm::vec3(0.0f);
                                         blockCollider.halfSize = glm::vec3(0.5f);
@@ -169,14 +190,15 @@ namespace our {
                                 int minZ = static_cast<int>(std::floor(minCorner.z));
                                 int maxZ = static_cast<int>(std::floor(maxCorner.z));
 
-                                for (int x = minX; x <= maxX; ++x) {
-                                    for (int y = minY; y <= maxY; ++y) {
-                                        for (int z = minZ; z <= maxZ; ++z) {
-                                            if (terrain->getBlock(x, y, z) != 0) {
-                                                stillGrounded = true;
-                                                break;
-                                            }
-                                        }
+for (int x = minX; x <= maxX; ++x) {
+                                     for (int y = minY; y <= maxY; ++y) {
+                                         for (int z = minZ; z <= maxZ; ++z) {
+                                             int blockType = terrain->getBlock(x, y, z);
+                                             if (blockType != 0 && blockType != voxel::WATER) { // Air is 0, WATER is non-solid
+                                                 stillGrounded = true;
+                                                 break;
+                                             }
+                                         }
                                         if (stillGrounded) break;
                                     }
                                     if (stillGrounded) break;

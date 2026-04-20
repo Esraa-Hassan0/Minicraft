@@ -107,6 +107,7 @@ namespace our {
             glm::mat4 cameraMatrix = entity->localTransform.toMat4();
             glm::vec3 forward = glm::vec3(cameraMatrix * glm::vec4(0, 0, -1, 0));
             glm::vec3 right = glm::vec3(cameraMatrix * glm::vec4(1, 0, 0, 0));
+            glm::vec3 up = glm::vec3(0, 1, 0);
 
             // Flatten the directions so we don't move slower or not at all when looking up/down
             forward.y = 0;
@@ -135,16 +136,35 @@ namespace our {
                 moveDirection = glm::normalize(moveDirection);
             }
 
-            glm::vec3 currentMovement = moveDirection * player->speed;
+            float speedMult = 1.0f;
+            if (player->isUnderwater) {
+                speedMult = player->waterSpeedMultiplier;
+            }
+
+            glm::vec3 currentMovement = moveDirection * player->speed * speedMult;
 
             // Update horizontal velocity
             player->velocity.x = currentMovement.x;
             player->velocity.z = currentMovement.z;
 
-            // Handle sprinting with shift key
-            if (keyboard.isPressed(GLFW_KEY_LEFT_SHIFT)) {
+            // Handle sprinting with shift key (only when not underwater)
+            if (keyboard.isPressed(GLFW_KEY_LEFT_SHIFT) && !player->isUnderwater) {
                 player->velocity.x *= 1.5f;
                 player->velocity.z *= 1.5f;
+            }
+
+            // Handle swimming up/down when underwater
+            if (player->isUnderwater) {
+                if (keyboard.isPressed(GLFW_KEY_SPACE)) {
+                    player->velocity.y = player->swimUpSpeed;
+                } else if (keyboard.isPressed(GLFW_KEY_LEFT_CONTROL) || keyboard.isPressed(GLFW_KEY_RIGHT_CONTROL)) {
+                    player->velocity.y = -player->swimDownSpeed;
+                } else {
+                    // Make entering water feel like diving: gently sink by default.
+                    // Gravity still applies in CollisionSystem, but this guarantees descent
+                    // even when reduced water gravity is too weak to notice.
+                    player->velocity.y = glm::min(player->velocity.y, -player->swimDownSpeed * 0.5f);
+                }
             }
         }
 
@@ -152,9 +172,11 @@ namespace our {
         void handleJumpInput(PlayerComponent* player) {
             Keyboard& keyboard = app->getKeyboard();
 
-            // Jump when space is pressed and player is on the ground
-            if (keyboard.justPressed(GLFW_KEY_SPACE) && player->isGrounded) {
-                player->velocity.y = player->jumpForce;
+            // Jump when space is pressed and player is on the ground (not underwater).
+            // Underwater vertical movement is handled in handleMovementInput.
+            if (keyboard.justPressed(GLFW_KEY_SPACE) && player->isGrounded && !player->isUnderwater) {
+                float jumpMult = player->isUnderwater ? player->waterJumpMultiplier : 1.0f;
+                player->velocity.y = player->jumpForce * jumpMult;
                 player->isGrounded = false;
                 our::AudioSystem::playSound("assets/sounds/jump.wav");
             }

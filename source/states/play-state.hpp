@@ -338,30 +338,44 @@ class Playstate : public our::State {
             ImGui::End();
         }
 
-        // 2. Draw Health
+// 2. Draw Health
         our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
         if (heartsTex) {
             ImDrawList* fgDl = ImGui::GetForegroundDrawList();
             float heartSize = 28.0f;
             float heartGap = 2.0f;
-            float totalW = 10 * heartSize + 9 * heartGap;
+            float maxHearts = 10;
+            float totalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
             float startX = displaySize.x * 0.5f - totalW * 0.5f;
             float invH = 60.0f + 26.0f; // hotbar frame height
             float startY = displaySize.y - invH - 16.0f - heartSize - 12.0f;
                 
-                ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
-                float texW = 45.0f;
-                float epsilon = 0.5f / texW;
+            ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
+            float texW = 45.0f;
 
-                ImVec2 uv0((27.0f + 0.5f) / texW, 1.0f);
-                ImVec2 uv1((36.0f - 0.5f) / texW, 0.0f);
+            int fullHearts = static_cast<int>(player->health / 10.0f);
+            float partialHeart = (player->health / 10.0f) - fullHearts;
 
-                for (int i = 0; i < 10; ++i) {
-                    ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
-                    ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
-                    fgDl->AddImage(texID, pMin, pMax, uv0, uv1);
+            ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
+            ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
+            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
+            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
+
+            for (int i = 0; i < maxHearts; ++i) {
+                ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
+                ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
+                if (i < fullHearts) {
+                    fgDl->AddImage(texID, pMin, pMax, uvFull0, uvFull1);
+                } else if (i == fullHearts && partialHeart > 0.0f) {
+                    ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
+                    ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
+                    fgDl->AddImage(texID, pMin, splitX, uvFull0, uvFull1);
+                    fgDl->AddImage(texID, splitX1, pMax, uvEmpty0, uvEmpty1);
+                } else {
+                    fgDl->AddImage(texID, pMin, pMax, uvEmpty0, uvEmpty1);
                 }
             }
+        }
 
         // 2. Draw Crosshair
         ImDrawList* drawList = ImGui::GetForegroundDrawList();
@@ -382,6 +396,30 @@ class Playstate : public our::State {
         timeSystem.update(&engineWorld, (float)deltaTime);
 
         blockInteraction.update((float)deltaTime, &engineWorld);
+
+        // Handle water damage
+        our::PlayerComponent* player = nullptr;
+        if (playerEntity) {
+            player = playerEntity->getComponent<our::PlayerComponent>();
+        }
+        if (player) {
+            if (player->isUnderwater) {
+                player->waterDamageTimer += (float)deltaTime;
+                while (player->waterDamageTimer >= player->waterDamageInterval) {
+                    player->health -= player->waterDamageAmount;
+                    player->waterDamageTimer -= player->waterDamageInterval;
+                    
+                    if (player->health <= 0.0f) {
+                        player->health = 0.0f;
+                        player->isAlive = false;
+                        player->gameState = our::GameState::LOSE;
+                        break;
+                    }
+                }
+            } else if (player->waterDamageTimer > 0.0f) {
+                player->waterDamageTimer = 0.0f;
+            }
+        }
         
         auto &mouse = getApp()->getMouse();
         if (playerEntity) {
@@ -401,8 +439,8 @@ class Playstate : public our::State {
                 if (highlightEdgesEntity) highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
             }
 
-            // Break Block
-            if (mouse.justPressed(0)) {
+            // Break Block (disabled underwater)
+            if (mouse.justPressed(0) && player && !player->isUnderwater) {
                 RayHit hit = terrainWorld.castRay(camPos, camDir);
                 if (hit.hit) {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
@@ -425,8 +463,8 @@ class Playstate : public our::State {
                     }
                 }
             }
-            // Place Block
-            if (mouse.justPressed(1) && player) {
+            // Place Block (disabled underwater)
+            if (mouse.justPressed(1) && player && !player->isUnderwater) {
                 RayHit hit = terrainWorld.castRay(camPos, camDir);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
                 int* stack = inventoryCountForType(player, placeType);
