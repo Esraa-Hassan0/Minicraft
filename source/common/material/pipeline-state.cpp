@@ -61,6 +61,14 @@ namespace our {
         // Read the color mask and depth mask from the json data if they exist
         colorMask = data.value("colorMask", colorMask);
         depthMask = data.value("depthMask", depthMask);
+        lineWidth = data.value("lineWidth", lineWidth);
+        
+        if (data.contains("polygonMode")) {
+            std::string mode = data.value("polygonMode", "GL_FILL");
+            if (mode == "GL_LINE") polygonMode = GL_LINE;
+            else if (mode == "GL_POINT") polygonMode = GL_POINT;
+            else polygonMode = GL_FILL;
+        }
     }
 
 }

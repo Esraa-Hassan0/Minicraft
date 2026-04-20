@@ -1,130 +1,116 @@
 #include "world.hpp"
 #include <random>
 #include <cmath>
+#include <cstdint>
 #include <glm/glm.hpp>
 namespace voxel {
 
-void World::generate() {
-    // This is your exact same terrain code, just moved into its own function!
-    for(int z = 0; z < depth; ++z) {
-        for(int x = 0; x < width; ++x) {
-            float hills = std::sin(x * 0.2f) + std::cos(z * 0.2f); 
-            int surfaceHeight = 8 + static_cast<int>(hills * 2.0f);
-            
-            for (int y = 0 ; y < height; ++y) {
-                if (y <= stoneLevel) {
-                    setBlock(x, y, z, STONE);
-                } 
-                else if (y <= surfaceHeight) {
-                    if (y == surfaceHeight) {
-                        if (y <= waterLevel + 1) {
-                            setBlock(x, y, z, SAND);
-                        } 
-                        else {
-                            if (std::rand() % 100 < 5) {
-                                setBlock(x, y, z, SAND);
-                            } else {
-                                setBlock(x, y, z, GRASS);
-                            }
-                        }
-                    }
-                    else {
-                        setBlock(x, y, z, STONE);
-                    }
-                }
-                else if (y <= waterLevel) {
-                    setBlock(x, y, z, WATER);
-                }
-            }
+namespace {
+    constexpr int BIOME_REGION_SIZE = 3;
+
+    int floor_div(int value, int divisor) {
+        int quotient = value / divisor;
+        int remainder = value % divisor;
+        if (remainder != 0 && value < 0) {
+            --quotient;
+        }
+        return quotient;
+    }
+
+    int positive_mod(int value, int mod) {
+        int result = value % mod;
+        return result < 0 ? result + mod : result;
+    }
+
+    ChunkType get_chunk_type_for_coordinates(int chunkX, int chunkZ) {
+        int regionX = floor_div(chunkX, BIOME_REGION_SIZE);
+        int regionZ = floor_div(chunkZ, BIOME_REGION_SIZE);
+
+        // 3x3 regions guarantee at least three neighboring chunks share a biome.
+        // This deterministic pattern also ensures all three biome types appear near spawn.
+        int biomeIndex = positive_mod(regionX + 2 * regionZ, 3);
+
+        switch (biomeIndex) {
+            case 0: return ChunkType::Desert;
+            case 1: return ChunkType::Grass;
+            default: return ChunkType::Sea;
         }
     }
 }
 
 void World::deserialize(const nlohmann::json& data) {
     // Read values from JSON, using the second argument as a fallback default
-    width = data.value("width", 16);
-    height = data.value("height", 16);
-    depth = data.value("depth", 16);
+    height = data.value("height", 100);
     waterLevel = data.value("waterLevel", 6);
     stoneLevel = data.value("stoneLevel", 4);
-
-    // Resize the block array to the new size and fill it with AIR (0)
-    blocks.assign(static_cast<std::size_t>(width) * height * depth, 0);
 }
 
+void World::generateChunk(int chunkX, int chunkZ) {
+    std::string key = std::to_string(chunkX) + "_" + std::to_string(chunkZ);
 
-
-bool World::isInside(int x, int y, int z) const {
-    return x >= 0 && x < width && y >= 0 && y < height && z >= 0 && z < depth;
+    if (activeChunks.find(key) == activeChunks.end()) {
+        ChunkType type = get_chunk_type_for_coordinates(chunkX, chunkZ);
+        activeChunks.emplace(key, Chunk(chunkX, chunkZ, height, type));
+        activeChunks.at(key).generate(waterLevel, stoneLevel);
+    }
 }
 
-std::size_t World::flatten(int x, int y, int z) const {
-    return static_cast<std::size_t>(x) +
-           static_cast<std::size_t>(width) *
-               (static_cast<std::size_t>(y) + static_cast<std::size_t>(height) * static_cast<std::size_t>(z));
-}
+int World::getBlock(int worldX, int y, int worldZ) const {
+    if (y < 0 || y >= height) return 0;
 
-int World::getBlock(int x, int y, int z) const {
-    if (!isInside(x, y, z)) {
+    int chunkX = static_cast<int>(std::floor(worldX / static_cast<float>(Chunk::CHUNK_SIZE)));
+    int chunkZ = static_cast<int>(std::floor(worldZ / static_cast<float>(Chunk::CHUNK_SIZE)));
+
+    std::string key = std::to_string(chunkX) + "_" + std::to_string(chunkZ);
+
+    auto it = activeChunks.find(key);
+    if (it == activeChunks.end()) {
         return 0;
     }
 
-    return blocks[flatten(x, y, z)];
+    int localX = (worldX % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+    int localZ = (worldZ % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+
+    return it->second.getBlock(localX, y, localZ);
 }
 
-void World::setBlock(int x, int y, int z, int type) {
-    if (!isInside(x, y, z)) {
-        return;
-    }
+void World::setBlock(int worldX, int y, int worldZ, int type) {
+    if (y < 0 || y >= height) return;
 
-    blocks[flatten(x, y, z)] = type;
-}
+    int chunkX = static_cast<int>(std::floor(worldX / static_cast<float>(Chunk::CHUNK_SIZE)));
+    int chunkZ = static_cast<int>(std::floor(worldZ / static_cast<float>(Chunk::CHUNK_SIZE)));
 
-bool World::isBlockVisible(int x, int y, int z) const {
-    if (getBlock(x, y, z) == 0) {
-        return false;
-    }
+    std::string key = std::to_string(chunkX) + "_" + std::to_string(chunkZ);
 
-    static constexpr int NEIGHBOR_OFFSETS[6][3] = {
-        {1, 0, 0},
-        {-1, 0, 0},
-        {0, 1, 0},
-        {0, -1, 0},
-        {0, 0, 1},
-        {0, 0, -1},
-    };
+    auto it = activeChunks.find(key);
+    if (it != activeChunks.end()) {
+        int localX = (worldX % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+        int localZ = (worldZ % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+        it->second.setBlock(localX, y, localZ, type);
 
-    for (const auto &offset : NEIGHBOR_OFFSETS) {
-        const int neighborX = x + offset[0];
-        const int neighborY = y + offset[1];
-        const int neighborZ = z + offset[2];
 
-        if (!isInside(neighborX, neighborY, neighborZ) || getBlock(neighborX, neighborY, neighborZ) == 0) {
-            return true;
+        if (localX == 0) {
+            std::string neighborKey = std::to_string(chunkX - 1) + "_" + std::to_string(chunkZ);
+            auto neighborIt = activeChunks.find(neighborKey);
+            if (neighborIt != activeChunks.end()) neighborIt->second.isDirty = true;
+        } 
+        else if (localX == Chunk::CHUNK_SIZE - 1) {
+            std::string neighborKey = std::to_string(chunkX + 1) + "_" + std::to_string(chunkZ);
+            auto neighborIt = activeChunks.find(neighborKey);
+            if (neighborIt != activeChunks.end()) neighborIt->second.isDirty = true;
+        }
+
+        if (localZ == 0) {
+            std::string neighborKey = std::to_string(chunkX) + "_" + std::to_string(chunkZ - 1);
+            auto neighborIt = activeChunks.find(neighborKey);
+            if (neighborIt != activeChunks.end()) neighborIt->second.isDirty = true;
+        } 
+        else if (localZ == Chunk::CHUNK_SIZE - 1) {
+            std::string neighborKey = std::to_string(chunkX) + "_" + std::to_string(chunkZ + 1);
+            auto neighborIt = activeChunks.find(neighborKey);
+            if (neighborIt != activeChunks.end()) neighborIt->second.isDirty = true;
         }
     }
-
-    return false;
-}
-
-std::vector<BlockData> World::getVisibleBlocks() const {
-    std::vector<BlockData> visibleBlocks;
-    visibleBlocks.reserve(blocks.size() / 4);
-
-    for (int z = 0; z < depth; ++z) {
-        for (int y = 0; y < height; ++y) {
-            for (int x = 0; x < width; ++x) {
-                const int type = getBlock(x, y, z);
-                if (type == 0 || !isBlockVisible(x, y, z)) {
-                    continue;
-                }
-
-                visibleBlocks.push_back(BlockData{x, y, z, type});
-            }
-        }
-    }
-
-    return visibleBlocks;
 }
 
 // Raycasting and block manipulation methods would go here (castRay, breakBlock, placeBlock)

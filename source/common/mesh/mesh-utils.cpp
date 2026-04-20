@@ -4,9 +4,55 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tinyobj/tiny_obj_loader.h>
 
+#include <voxel/chunk.hpp>
+#include <voxel/world.hpp>
+
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+
+namespace {
+    const glm::ivec3 NEIGHBOR_OFFSETS[6] = {
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
+    };
+
+    const glm::vec3 FACE_NORMALS[6] = {
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
+    };
+
+    const glm::vec3 FACE_VERTICES[6][4] = {
+        // Right (+X)
+        {{1.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
+        // Left (-X)
+        {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
+        // Top (+Y)
+        {{0.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
+        // Bottom (-Y)
+        {{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
+        // Front (+Z)
+        {{0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 1.0f}},
+        // Back (-Z)
+        {{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}}
+    };
+
+    const glm::vec2 FACE_UVS[4] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}
+    };
+
+    our::Color getFaceColor(int face, int blockType) {
+        if (blockType == voxel::WATER) {
+            return our::Color(50, 100, 255, 200);
+        }
+
+        switch (face) {
+            case 2: return our::Color(255, 255, 255, 255); // Top
+            case 3: return our::Color(100, 100, 100, 255); // Bottom
+            case 4:
+            case 5: return our::Color(170, 170, 170, 255); // Front / Back
+            default: return our::Color(200, 200, 200, 255); // Left / Right
+        }
+    }
+}
 
 our::Mesh* our::mesh_utils::loadOBJ(const std::string& filename) {
 
@@ -120,4 +166,100 @@ our::Mesh* our::mesh_utils::sphere(const glm::ivec2& segments){
     }
 
     return new our::Mesh(vertices, elements);
+}
+
+our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter, FaceCategory faceCategory) {
+    MeshBuildData meshData;
+    meshData.vertices.reserve(4000);
+    meshData.elements.reserve(6000);
+
+    for (int z = 0; z < voxel::Chunk::CHUNK_SIZE; ++z) {
+        for (int y = 0; y < chunk.height; ++y) {
+            for (int x = 0; x < voxel::Chunk::CHUNK_SIZE; ++x) {
+                int blockType = chunk.getBlock(x, y, z);
+                if (blockType == voxel::AIR) continue;
+                if (blockTypeFilter >= 0 && blockType != blockTypeFilter) continue;
+
+                glm::vec3 blockPos(x, y, z);
+                int worldX = chunk.chunkX * voxel::Chunk::CHUNK_SIZE + x;
+                int worldZ = chunk.chunkZ * voxel::Chunk::CHUNK_SIZE + z;
+
+                for (int face = 0; face < 6; ++face) {
+                    if (faceCategory == FaceCategory::TOP && face != 2) continue;
+                    if (faceCategory == FaceCategory::BOTTOM && face != 3) continue;
+                    if (faceCategory == FaceCategory::SIDES && (face == 2 || face == 3)) continue;
+
+                    int nx = worldX + NEIGHBOR_OFFSETS[face].x;
+                    int ny = y + NEIGHBOR_OFFSETS[face].y;
+                    int nz = worldZ + NEIGHBOR_OFFSETS[face].z;
+
+                    if (world.getBlock(nx, ny, nz) != voxel::AIR) {
+                        continue;
+                    }
+
+                    unsigned int startIndex = static_cast<unsigned int>(meshData.vertices.size());
+                    our::Color faceColor = getFaceColor(face, blockType);
+
+                    for (int v = 0; v < 4; ++v) {
+                        our::Vertex vertex;
+                        vertex.position = blockPos + FACE_VERTICES[face][v];
+                        vertex.normal = FACE_NORMALS[face];
+                        vertex.color = faceColor;
+                        vertex.tex_coord = FACE_UVS[v];
+                        meshData.vertices.push_back(vertex);
+                    }
+
+                    meshData.elements.push_back(startIndex + 0);
+                    meshData.elements.push_back(startIndex + 1);
+                    meshData.elements.push_back(startIndex + 2);
+
+                    meshData.elements.push_back(startIndex + 2);
+                    meshData.elements.push_back(startIndex + 3);
+                    meshData.elements.push_back(startIndex + 0);
+                }
+            }
+        }
+    }
+
+    return meshData;
+}
+
+our::Mesh* our::mesh_utils::buildChunkMesh(const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter, FaceCategory faceCategory) {
+    auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter, faceCategory);
+    if (meshData.elements.empty()) {
+        return nullptr;
+    }
+    return new Mesh(meshData.vertices, meshData.elements);
+}
+
+void our::mesh_utils::updateChunkMesh(Mesh* mesh, const voxel::Chunk& chunk, const voxel::World& world, int blockTypeFilter, FaceCategory faceCategory) {
+    if (!mesh) return;
+    auto meshData = buildChunkMeshData(chunk, world, blockTypeFilter, faceCategory);
+    mesh->updateBuffers(meshData.vertices, meshData.elements);
+}
+
+our::Mesh* our::mesh_utils::cubeEdges() {
+    std::vector<our::Vertex> vertices = {
+        // Bottom 4 vertices
+        {{-0.5f, -0.5f, -0.5f}, {255, 255, 255, 255}, {0, 0}, {0, 0, 0}},
+        {{ 0.5f, -0.5f, -0.5f}, {255, 255, 255, 255}, {1, 0}, {0, 0, 0}},
+        {{ 0.5f, -0.5f,  0.5f}, {255, 255, 255, 255}, {1, 1}, {0, 0, 0}},
+        {{-0.5f, -0.5f,  0.5f}, {255, 255, 255, 255}, {0, 1}, {0, 0, 0}},
+        // Top 4 vertices
+        {{-0.5f,  0.5f, -0.5f}, {255, 255, 255, 255}, {0, 0}, {0, 0, 0}},
+        {{ 0.5f,  0.5f, -0.5f}, {255, 255, 255, 255}, {1, 0}, {0, 0, 0}},
+        {{ 0.5f,  0.5f,  0.5f}, {255, 255, 255, 255}, {1, 1}, {0, 0, 0}},
+        {{-0.5f,  0.5f,  0.5f}, {255, 255, 255, 255}, {0, 1}, {0, 0, 0}}
+    };
+
+    std::vector<unsigned int> elements = {
+        // Bottom square
+        0, 1, 1, 2, 2, 3, 3, 0,
+        // Top square
+        4, 5, 5, 6, 6, 7, 7, 4,
+        // Vertical edges
+        0, 4, 1, 5, 2, 6, 3, 7
+    };
+
+    return new Mesh(vertices, elements, GL_LINES);
 }
