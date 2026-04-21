@@ -6,6 +6,7 @@
 
 #include <voxel/chunk.hpp>
 #include <voxel/world.hpp>
+#include <voxel/types.hpp>
 
 #include <iostream>
 #include <vector>
@@ -39,10 +40,10 @@ namespace {
         {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}
     };
 
-    our::Color getFaceColor(int face, int blockType) {
-        if (blockType == voxel::WATER) {
-            return our::Color(50, 100, 255, 200);
-        }
+     our::Color getFaceColor(int face, int blockType) {
+         if (blockType == voxel::block_types::WATER) {
+             return our::Color(50, 100, 255, 200);
+         }
 
         switch (face) {
             case 2: return our::Color(255, 255, 255, 255); // Top
@@ -175,9 +176,9 @@ our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::
 
     for (int z = 0; z < voxel::Chunk::CHUNK_SIZE; ++z) {
         for (int y = 0; y < chunk.height; ++y) {
-            for (int x = 0; x < voxel::Chunk::CHUNK_SIZE; ++x) {
-                int blockType = chunk.getBlock(x, y, z);
-                if (blockType == voxel::AIR) continue;
+             for (int x = 0; x < voxel::Chunk::CHUNK_SIZE; ++x) {
+                 int blockType = chunk.getBlock(x, y, z);
+                 if (blockType == voxel::block_types::AIR) continue;
                 if (blockTypeFilter >= 0 && blockType != blockTypeFilter) continue;
 
                 glm::vec3 blockPos(x, y, z);
@@ -193,21 +194,51 @@ our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::
                     int ny = y + NEIGHBOR_OFFSETS[face].y;
                     int nz = worldZ + NEIGHBOR_OFFSETS[face].z;
 
-                    if (world.getBlock(nx, ny, nz) != voxel::AIR) {
-                        continue;
-                    }
+                      int neighborBlock = world.getBlock(nx, ny, nz);
 
-                    unsigned int startIndex = static_cast<unsigned int>(meshData.vertices.size());
-                    our::Color faceColor = getFaceColor(face, blockType);
+                      // 1. If the neighbor is a solid, opaque block, DO NOT draw this face.
+                      if (neighborBlock != voxel::block_types::AIR && 
+                          neighborBlock != voxel::block_types::WATER && 
+                          neighborBlock != voxel::block_types::Glass) 
+                      {
+                          continue;
+                      }
 
-                    for (int v = 0; v < 4; ++v) {
-                        our::Vertex vertex;
-                        vertex.position = blockPos + FACE_VERTICES[face][v];
-                        vertex.normal = FACE_NORMALS[face];
-                        vertex.color = faceColor;
-                        vertex.tex_coord = FACE_UVS[v];
-                        meshData.vertices.push_back(vertex);
-                    }
+                      // 2. If WE are a water block, and the NEIGHBOR is also water, DO NOT draw the face.
+                      // (This prevents ugly grid lines from rendering inside the middle of a lake).
+                      if (blockType == voxel::block_types::WATER && neighborBlock == voxel::block_types::WATER) 
+                      {
+                          continue;
+                      }
+
+                     unsigned int startIndex = static_cast<unsigned int>(meshData.vertices.size());
+                     our::Color faceColor = getFaceColor(face, blockType);
+                     
+                      // Calculate lighting based on adjacent block's light level
+                      int lightValue = world.getLight(
+                          worldX + NEIGHBOR_OFFSETS[face].x,
+                          y + NEIGHBOR_OFFSETS[face].y,
+                          worldZ + NEIGHBOR_OFFSETS[face].z
+                      );
+                     // Map the 0-15 light level to a 0.1 - 1.0 float range
+                     // We use 0.1 as a minimum so caves aren't completely pitch black
+                     float lightIntensity = 0.1f + (static_cast<float>(lightValue) / 15.0f) * 0.9f;
+                     // Create your color vector based on the light
+                     our::Color vertexColor = {
+                         static_cast<uint8_t>(faceColor.r * lightIntensity),
+                         static_cast<uint8_t>(faceColor.g * lightIntensity),
+                         static_cast<uint8_t>(faceColor.b * lightIntensity),
+                         faceColor.a
+                     };
+
+                     for (int v = 0; v < 4; ++v) {
+                         our::Vertex vertex;
+                         vertex.position = blockPos + FACE_VERTICES[face][v];
+                         vertex.normal = FACE_NORMALS[face];
+                         vertex.color = vertexColor;
+                         vertex.tex_coord = FACE_UVS[v];
+                         meshData.vertices.push_back(vertex);
+                     }
 
                     meshData.elements.push_back(startIndex + 0);
                     meshData.elements.push_back(startIndex + 1);

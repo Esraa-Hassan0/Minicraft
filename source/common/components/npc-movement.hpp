@@ -15,6 +15,8 @@ namespace our {
         bool isMoving = false;
         int blockedAttempts = 0;
         
+        glm::vec3 velocity = glm::vec3(0.0f);
+        bool isGrounded = false;
         enum class MovementType {
             IDLE,
             PATROL,

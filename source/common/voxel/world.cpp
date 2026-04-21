@@ -1,4 +1,5 @@
 #include "world.hpp"
+#include "types.hpp"
 #include <random>
 #include <cmath>
 #include <cstdint>
@@ -171,5 +172,23 @@ void World::placeBlock(const RayHit& hit, int type) {
     }
 }
 
+int World::getLight(int worldX, int y, int worldZ) const {
+    if (y < 0 || y >= height) return 0;
+
+    int chunkX = static_cast<int>(std::floor(worldX / static_cast<float>(Chunk::CHUNK_SIZE)));
+    int chunkZ = static_cast<int>(std::floor(worldZ / static_cast<float>(Chunk::CHUNK_SIZE)));
+
+    std::string key = std::to_string(chunkX) + "_" + std::to_string(chunkZ);
+
+    auto it = activeChunks.find(key);
+    if (it == activeChunks.end()) {
+        return 0;
+    }
+
+    int localX = (worldX % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+    int localZ = (worldZ % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
+
+    return it->second.getLight(localX, y, localZ);
+}
 
 } // namespace voxel

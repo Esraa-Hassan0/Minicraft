@@ -1,34 +1,42 @@
 #pragma once
-#include <cstddef>
+
 #include <vector>
-#include "types.hpp"
-namespace voxel {
+#include <cstdint>
 
-enum class ChunkType {
-    Desert = 0,
-    Grass = 1,
-    Sea = 2
-};
+namespace voxel
+{
+     enum class ChunkType
+     {
+         Default,
+         Sea,
+         Desert,
+         Grass
+     };
 
+    class Chunk
+    {
+    public:
+        static const int CHUNK_SIZE = 16;
+        int chunkX, chunkZ, height;
+        ChunkType chunkType;
 
-class Chunk {
-public:
-    static constexpr int CHUNK_SIZE = 16;    
-    int chunkX;
-    int chunkZ;
-    int height;
-    ChunkType chunkType;
-    bool isDirty = true; // Flag to indicate if the chunk's mesh needs to be rebuilt
-    Chunk(int cx, int cz, int h, ChunkType type = ChunkType::Grass);
+        std::vector<uint8_t> blocks;
+        std::vector<uint8_t> light;
 
-    void generate(int waterLevel, int stoneLevel);
-    int getBlock(int x, int y, int z) const;
-    void setBlock(int x, int y, int z, int type);
-private:
-    std::vector<int> blocks;
+        bool isDirty = true;
 
-    bool isInside(int x, int y, int z) const;
-    std::size_t flatten(int x, int y, int z) const;
-};
+        Chunk(int cx, int cz, int h, ChunkType type);
 
-} // namespace voxel
+        void generate(int waterLevel, int stoneLevel);
+        void calculateLighting();
+
+        bool isInside(int x, int y, int z) const;
+        std::size_t flatten(int x, int y, int z) const;
+
+        int getBlock(int x, int y, int z) const;
+        void setBlock(int x, int y, int z, int type);
+
+        int getLight(int x, int y, int z) const;
+        void setLight(int x, int y, int z, int level);
+    };
+}

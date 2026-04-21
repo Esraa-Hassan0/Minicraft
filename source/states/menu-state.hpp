@@ -13,6 +13,7 @@
 #include <components/camera.hpp>
 #include <asset-loader.hpp>
 #include <voxel/world.hpp>
+#include <voxel/types.hpp>
 #include <components/mesh-renderer.hpp>
 #include <functional>
 #include <array>

@@ -277,14 +277,20 @@ class Playstate : public our::State {
         dl->AddRect(iconMin, iconMax, outline, 4.0f, ImDrawCornerFlags_All, 1.25f);
     }
 
-    void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
-        if (!npcEntity || !player) return;
-        auto* killable = npcEntity->getComponent<our::KillableNPCComponent>();
-        if (killable) {
+void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
+    if (!npcEntity || !player) return;
+    auto* killable = npcEntity->getComponent<our::KillableNPCComponent>();
+    if (killable) {
+        if (killable->npcType == "chest") {
+            // Increase health for chests, capped at max health
+            player->health = std::min(player->health + killable->foodReward, player->maxHealth);
+        } else {
+            // Original behavior for other NPCs (increase meat count)
             player->meatCount += killable->foodReward;
         }
-        engineWorld.markForRemoval(npcEntity);
     }
+    engineWorld.markForRemoval(npcEntity);
+}
 
     our::Entity* findHitNPC(const glm::vec3& camPos, const glm::vec3& camDir, float maxDist) {
         float closestDist = maxDist;
@@ -359,24 +365,30 @@ class Playstate : public our::State {
                             }
                             movement->waitTimer = 0.0f;
                         }
-                    } else {
-                        glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
-                        float dist = glm::length(dir);
-                        if (dist > 0.1f) {
-                            glm::vec3 moveDir = glm::normalize(dir);
-                            glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
-                            if (isValidNPCPosition(entity, newPos)) {
-                                entity->localTransform.position = newPos;
-                            } else {
-                                movement->blockedAttempts++;
-                                if (movement->blockedAttempts > 3) {
-                                    movement->isMoving = false;
-                                    movement->blockedAttempts = 0;
-                                }
-                            }
-                        } else {
-                            movement->isMoving = false;
-                        }
+                     } else {
+                         glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
+                         float dist = glm::length(dir);
+                         if (dist > 0.1f) {
+                             glm::vec3 moveDir = glm::normalize(dir);
+                             glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                             if (isValidNPCPosition(entity, newPos)) {
+                                 entity->localTransform.position = newPos;
+                             } else {
+                                 movement->blockedAttempts++;
+                                 if (movement->blockedAttempts > 3) {
+                                     movement->isMoving = false;
+                                     movement->blockedAttempts = 0;
+                                 }
+                             }
+                         } else {
+                             // Check if we should jump when blocked
+                             if (movement->isGrounded) {
+                                 // Apply upward velocity for jumping (1 block high)
+                                 movement->velocity.y = 5.0f; // Jump strength
+                                 movement->isGrounded = false;
+                             }
+                             movement->isMoving = false;
+                         }
                     }
                     break;
 
@@ -404,9 +416,15 @@ class Playstate : public our::State {
                             if (isValidNPCPosition(entity, newPos)) {
                                 entity->localTransform.position = newPos;
                             }
-                        } else {
-                            movement->isMoving = false;
-                        }
+                         } else {
+                             // Check if we should jump when blocked
+                             if (movement->isGrounded) {
+                                 // Apply upward velocity for jumping (1 block high)
+                                 movement->velocity.y = 5.0f; // Jump strength
+                                 movement->isGrounded = false;
+                             }
+                             movement->isMoving = false;
+                         }
                     }
                     break;
 
