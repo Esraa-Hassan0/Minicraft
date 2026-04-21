@@ -55,10 +55,10 @@ class EnemySystem {
 public:
 
     // ── Tuning ────────────────────────────────────────────────
-    float spawnRadius      = 20.0f;  // Spawn enemies this far from player
-    float spawnMinRadius   =  8.0f;  // But not closer than this
-    float spawnInterval    = 10.0f;  // Seconds between spawn waves
-    int   maxEnemies       = 12;     // Soft cap on living enemies
+    float spawnRadius      = 28.0f;  // Spawn enemies this far from player
+    float spawnMinRadius   = 12.0f;  // But not closer than this
+    float spawnInterval    = 12.0f;  // Seconds between spawn checks
+    int   maxEnemies       = 7;      // Soft cap on living enemies
 
     // ── Internal state ────────────────────────────────────────
     float spawnTimer = 0.0f;
@@ -302,10 +302,10 @@ private:
                 if (dy < 0) {
                     // Hit floor → snap up, mark grounded
                     enemy->isGrounded = true;
-                    pos.y = snapToBlockEdgeY(pos.y, dy, cc.y, hs.y, terrain);
+                    pos.y = snapToBlockEdgeY(pos.y, dy, pos.x, pos.z, cc, hs, terrain);
                 } else {
                     // Hit ceiling → stop
-                    pos.y = snapToBlockEdgeY(pos.y, dy, cc.y, hs.y, terrain);
+                    pos.y = snapToBlockEdgeY(pos.y, dy, pos.x, pos.z, cc, hs, terrain);
                 }
                 enemy->velocity.y = 0;
             }
@@ -341,25 +341,42 @@ private:
 
     // Snap Y to the nearest block face (floor or ceiling)
     float snapToBlockEdgeY(float curY, float delta,
-                            float ccY, float hsY, voxel::World* terrain)
+                           float posX, float posZ,
+                           const glm::vec3& cc,
+                           const glm::vec3& hs,
+                           voxel::World* terrain)
     {
+        if (!terrain) return curY;
+
+        int x0 = (int)std::floor(posX + cc.x - hs.x);
+        int x1 = (int)std::floor(posX + cc.x + hs.x);
+        int z0 = (int)std::floor(posZ + cc.z - hs.z);
+        int z1 = (int)std::floor(posZ + cc.z + hs.z);
+
         if (delta < 0) {
-            // Find the highest solid block below the collider
-            float bottom = curY + ccY - hsY;
-            int by = (int)std::floor(bottom);
-            // Walk up until clear
-            for (int i = 0; i < 3; i++) {
-                int bt = terrain->getBlock((int)std::floor(curY), by+i,
-                                           (int)std::floor(curY));
-                if (bt == 0 || bt == voxel::WATER) continue;
-                return (float)(by + i + 1) - ccY + hsY + 0.001f;
+            float bottom = curY + delta + cc.y - hs.y;
+            int yStart = (int)std::floor(bottom);
+            int yEnd = yStart + 3;
+
+            float bestTop = -1e9f;
+            for (int by = yStart; by <= yEnd; ++by) {
+                for (int bx = x0; bx <= x1; ++bx) {
+                    for (int bz = z0; bz <= z1; ++bz) {
+                        int bt = terrain->getBlock(bx, by, bz);
+                        if (bt == voxel::AIR || bt == voxel::WATER) continue;
+                        bestTop = std::max(bestTop, (float)(by + 1));
+                    }
+                }
             }
-            return (float)(by + 1) - ccY + hsY + 0.001f;
+
+            if (bestTop > -1e8f) {
+                return bestTop - cc.y + hs.y + 0.001f;
+            }
+
+            return curY;
         } else {
-            // Hit ceiling: snap down
-            float top = curY + ccY + hsY;
-            int by = (int)std::floor(top);
-            return (float)by - ccY - hsY - 0.001f;
+            // Ceiling collision: keep current height and stop vertical velocity.
+            return curY;
         }
     }
 
@@ -376,7 +393,14 @@ private:
         int living = countLivingEnemies(world);
         if (living >= maxEnemies) return;
 
-        int toSpawn = std::min(3 + waveNumber, maxEnemies - living);
+        // Minecraft-like pacing: many checks fail, and successful checks spawn small groups.
+        if ((std::rand() % 100) < 45) return;
+
+        int toSpawn = 1;
+        if (waveNumber > 3 && (std::rand() % 100) < 35) {
+            toSpawn = 2;
+        }
+        toSpawn = std::min(toSpawn, maxEnemies - living);
 
         for (int i = 0; i < toSpawn; i++) {
             EnemyType type;
@@ -390,25 +414,59 @@ private:
     }
 
     void spawnEnemy(World* world, voxel::World* terrain, glm::vec3 playerPos, EnemyType type) {
-        float angle = (float)(std::rand() % 360) * 3.14159f / 180.0f;
-        float dist  = spawnMinRadius + (float)(std::rand() % (int)(spawnRadius - spawnMinRadius));
-        glm::vec3 spawnPos = playerPos + glm::vec3(
-            std::cos(angle) * dist,
-            0.0f,
-            std::sin(angle) * dist
-        );
+        glm::vec3 spawnPos(0.0f);
+        bool foundSpawn = false;
 
-        // Find ground level at spawn position
-        if (terrain) {
-            for (int y = terrain->height - 1; y >= 0; --y) {
-                if (isSolidAt(terrain, (int)std::floor(spawnPos.x), y, (int)std::floor(spawnPos.z))) {
-                    spawnPos.y = (float)(y + 1) + 0.01f;
-                    break;
+        for (int attempt = 0; attempt < 14 && !foundSpawn; ++attempt) {
+            float angle = (float)(std::rand() % 360) * 3.14159f / 180.0f;
+            float distNorm = (float)(std::rand() % 1000) / 999.0f;
+            float dist = spawnMinRadius + distNorm * (spawnRadius - spawnMinRadius);
+
+            glm::vec3 candidateXZ = playerPos + glm::vec3(
+                std::cos(angle) * dist,
+                0.0f,
+                std::sin(angle) * dist);
+
+            int cx = (int)std::floor(candidateXZ.x);
+            int cz = (int)std::floor(candidateXZ.z);
+
+            if (terrain) {
+                for (int y = terrain->height - 2; y >= 1; --y) {
+                    int below = terrain->getBlock(cx, y, cz);
+                    int feet  = terrain->getBlock(cx, y + 1, cz);
+                    int head  = terrain->getBlock(cx, y + 2, cz);
+
+                    bool solidGround = (below != voxel::AIR && below != voxel::WATER);
+                    bool clearBody   = (feet == voxel::AIR || feet == voxel::WATER) &&
+                                       (head == voxel::AIR || head == voxel::WATER);
+
+                    if (solidGround && clearBody) {
+                        spawnPos = glm::vec3((float)cx + 0.5f, (float)(y + 1) + 0.01f, (float)cz + 0.5f);
+
+                        // Avoid clusters that look like over-spawning.
+                        bool crowded = false;
+                        for (auto* e : world->getEntities()) {
+                            auto* existing = e->getComponent<EnemyComponent>();
+                            if (!existing || existing->state == EnemyState::DEAD) continue;
+                            if (glm::distance(e->localTransform.position, spawnPos) < 5.5f) {
+                                crowded = true;
+                                break;
+                            }
+                        }
+
+                        if (!crowded) {
+                            foundSpawn = true;
+                        }
+                        break;
+                    }
                 }
+            } else {
+                spawnPos = glm::vec3(candidateXZ.x, std::max(playerPos.y - 5.0f, 1.0f), candidateXZ.z);
+                foundSpawn = true;
             }
-        } else {
-            spawnPos.y = std::max(playerPos.y - 5.0f, 1.0f);
         }
+
+        if (!foundSpawn) return;
 
         Entity* entity = world->add();
         entity->name   = (type == EnemyType::ZOMBIE)   ? "zombie"   :
@@ -493,65 +551,7 @@ private:
         }
 
         glm::vec3& pos = entity->localTransform.position;
-        float distToPlayer = glm::distance(pos, playerPos);
-
-        // ── Jump logic (ourCraft zombie.cpp approach) ─────────────
-        //    ourCraft checks if the block directly AHEAD is solid,
-        //    then only jumps if the block above it is clear (max 1-block obstacle).
-        //    This avoids jumping in place — the enemy only jumps when needed.
-        if (enemy->jumpCooldown > 0.0f)
-            enemy->jumpCooldown -= dt;
-
-        if (enemy->isGrounded && enemy->jumpCooldown <= 0.0f
-            && (enemy->state == EnemyState::CHASE || enemy->state == EnemyState::ATTACK))
-        {
-            // Direction the enemy is trying to move (horizontal only)
-            glm::vec3 moveDir{enemy->velocity.x, 0.0f, enemy->velocity.z};
-            float movLen = glm::length(moveDir);
-
-            if (movLen > 0.1f && terrain) {
-                moveDir /= movLen;
-
-                // Block 1 unit ahead at foot level
-                glm::vec3 aheadFoot = pos + moveDir * 0.6f;
-                int bx = (int)std::floor(aheadFoot.x);
-                int by = (int)std::floor(pos.y + 0.1f);   // foot level
-                int bz = (int)std::floor(aheadFoot.z);
-
-                int blockAhead = terrain->getBlock(bx, by, bz);
-                bool wallAhead = (blockAhead != 0 && blockAhead != voxel::WATER);
-
-                if (wallAhead) {
-                    // Only jump if the block above the obstacle is clear (max 1-block wall)
-                    int blockAbove      = terrain->getBlock(bx, by + 1, bz);
-                    int blockAboveAbove = terrain->getBlock(bx, by + 2, bz);
-                    bool clearAbove = (blockAbove == 0 || blockAbove == voxel::WATER);
-                    bool clearAboveAbove = (blockAboveAbove == 0 || blockAboveAbove == voxel::WATER);
-
-                    if (clearAbove && clearAboveAbove) {
-                        enemy->velocity.y   = 7.0f;
-                        enemy->jumpCooldown = 0.7f;
-                        enemy->stuckTimer   = 0.0f;
-                    }
-                    // If wall is >1 block tall, don't jump (avoids bounce loop)
-                }
-
-                // Stuckness failsafe: if we've been stationary too long, reset vel
-                float hDist = glm::length(pos - enemy->previousPosition);
-                if (movLen > 0.5f && hDist < 0.001f) {
-                    enemy->stuckTimer += dt;
-                    if (enemy->stuckTimer > 1.5f) {
-                        // Give up trying to move through this obstacle
-                        enemy->velocity.x = 0;
-                        enemy->velocity.z = 0;
-                        enemy->stuckTimer = 0;
-                        enemy->jumpCooldown = 0.3f;
-                    }
-                } else {
-                    enemy->stuckTimer = 0.0f;
-                }
-            }
-        }
+        float distToPlayer = glm::length(glm::vec2(playerPos.x - pos.x, playerPos.z - pos.z));
 
         // Attack cooldown tick
         enemy->timeSinceAttack += dt;
@@ -570,6 +570,54 @@ private:
             break;
         }
 
+        if (enemy->jumpCooldown > 0.0f) {
+            enemy->jumpCooldown -= dt;
+        }
+
+        // Controlled jump-over-obstacle behavior (only when moving and blocked).
+        if (terrain && enemy->isGrounded && enemy->jumpCooldown <= 0.0f &&
+            (enemy->state == EnemyState::CHASE || enemy->state == EnemyState::ATTACK)) {
+            glm::vec3 moveDir{enemy->velocity.x, 0.0f, enemy->velocity.z};
+            float movLen = glm::length(moveDir);
+            if (movLen > 0.65f) {
+                moveDir /= movLen;
+                glm::vec3 ahead = pos + moveDir * 0.7f;
+                int bx = (int)std::floor(ahead.x);
+                int bz = (int)std::floor(ahead.z);
+                int footY = (int)std::floor(pos.y + 0.05f);
+
+                int blockAhead = terrain->getBlock(bx, footY, bz);
+                int blockAbove = terrain->getBlock(bx, footY + 1, bz);
+                int blockAboveAbove = terrain->getBlock(bx, footY + 2, bz);
+
+                bool wallAhead = (blockAhead != voxel::AIR && blockAhead != voxel::WATER);
+                bool clearAbove = (blockAbove == voxel::AIR || blockAbove == voxel::WATER);
+                bool clearAboveAbove = (blockAboveAbove == voxel::AIR || blockAboveAbove == voxel::WATER);
+
+                if (wallAhead && clearAbove && clearAboveAbove) {
+                    enemy->velocity.y = std::max(enemy->velocity.y, 6.8f);
+                    enemy->jumpCooldown = 0.85f;
+                    enemy->stuckTimer = 0.0f;
+                }
+            }
+        }
+
+        // If blocked for too long, stop briefly and repick direction through idle wander.
+        glm::vec3 moveDir{enemy->velocity.x, 0.0f, enemy->velocity.z};
+        float movLen = glm::length(moveDir);
+        float hDist = glm::length(glm::vec2(pos.x - enemy->previousPosition.x, pos.z - enemy->previousPosition.z));
+        if (movLen > 0.5f && hDist < 0.001f) {
+            enemy->stuckTimer += dt;
+            if (enemy->stuckTimer > 1.15f) {
+                enemy->velocity.x = 0.0f;
+                enemy->velocity.z = 0.0f;
+                enemy->idleTimer = enemy->idleDuration;
+                enemy->stuckTimer = 0.0f;
+            }
+        } else {
+            enemy->stuckTimer = 0.0f;
+        }
+
         // Face the player when chasing/attacking
         if (enemy->state == EnemyState::CHASE || enemy->state == EnemyState::ATTACK) {
             glm::vec3 dir = playerPos - pos;
@@ -586,6 +634,9 @@ private:
         // Save position AFTER collision resolution so next frame's
         // stuck-detection compares two post-collision positions (apples-to-apples).
         enemy->previousPosition = pos;
+
+        // Visual movement animation (walk sway) without vertical hopping.
+        animateEnemyMotion(entity, enemy, dt);
     }
 
     // ─ Zombie ────────────────────────────────────────────────
@@ -658,34 +709,27 @@ private:
             enemy->state = EnemyState::IDLE;
             doIdleWander(entity, enemy, dt);
         } else {
-            if (dist < enemy->preferredRange * 0.7f) {
-                // Too close → back away
-                enemy->state = EnemyState::CHASE;
+            // Keep skeleton generally advancing toward player, only slight retreat when too close.
+            enemy->state = EnemyState::CHASE;
+            setHorizontalVelocity(enemy, pos, playerPos);
+
+            if (dist < enemy->attackRange + 0.45f) {
                 glm::vec3 awayDir = pos - playerPos;
                 awayDir.y = 0.0f;
                 float len = glm::length(awayDir);
                 if (len > 0.1f) {
                     awayDir /= len;
-                    enemy->velocity.x = awayDir.x * enemy->speed;
-                    enemy->velocity.z = awayDir.z * enemy->speed;
-                } else {
-                    enemy->velocity.x = 0;
-                    enemy->velocity.z = 0;
+                    enemy->velocity.x = awayDir.x * enemy->speed * 0.55f;
+                    enemy->velocity.z = awayDir.z * enemy->speed * 0.55f;
                 }
-            } else if (dist > enemy->preferredRange * 1.3f) {
-                // Too far → approach
-                enemy->state = EnemyState::CHASE;
-                setHorizontalVelocity(enemy, pos, playerPos);
-            } else {
-                // Good range → shoot
-                enemy->state = EnemyState::ATTACK;
-                enemy->velocity.x = 0;
-                enemy->velocity.z = 0;
             }
 
             // Shoot projectile
             if (enemy->timeSinceShot >= enemy->shootCooldown && dist <= enemy->detectionRange) {
                 enemy->timeSinceShot = 0.0f;
+                enemy->state = EnemyState::ATTACK;
+                enemy->velocity.x *= 0.35f;
+                enemy->velocity.z *= 0.35f;
                 fireProjectile(world, pos + glm::vec3(0, 1.2f, 0), playerPos, enemy->attackDamage);
             }
         }
@@ -711,18 +755,20 @@ private:
             return;
         }
 
-        if (dist > enemy->detectionRange) {
+        if (enemy->isLit) {
+            enemy->state = EnemyState::ATTACK;
+            enemy->velocity.x *= 0.4f;
+            enemy->velocity.z *= 0.4f;
+        } else if (dist > enemy->detectionRange) {
             enemy->state = EnemyState::IDLE;
             doIdleWander(entity, enemy, dt);
-        } else if (dist <= enemy->attackRange) {
+        } else if (dist <= enemy->attackRange + 0.7f) {
             // Close enough → light the fuse
             enemy->state = EnemyState::ATTACK;
             enemy->velocity.x = 0;
             enemy->velocity.z = 0;
-            if (!enemy->isLit) {
-                enemy->isLit = true;
-                enemy->fuseTimer = 0.0f;
-            }
+            enemy->isLit = true;
+            enemy->fuseTimer = 0.0f;
         } else {
             // Chase player
             enemy->state = EnemyState::CHASE;
@@ -746,6 +792,33 @@ private:
     }
 
     // ── Utilities ─────────────────────────────────────────────
+
+    void animateEnemyMotion(Entity* entity, EnemyComponent* enemy, float dt) {
+        // Keep creeper fuse pulse authoritative while lit.
+        if (enemy->type == EnemyType::CREEPER && enemy->isLit) {
+            return;
+        }
+
+        float horizontalSpeed = glm::length(glm::vec2(enemy->velocity.x, enemy->velocity.z));
+        bool moving = horizontalSpeed > 0.2f &&
+            (enemy->state == EnemyState::CHASE || enemy->state == EnemyState::ATTACK);
+
+        enemy->walkAnimTime += dt * (moving ? (3.5f + horizontalSpeed) : 1.2f);
+
+        float targetRoll = moving
+            ? std::sin(enemy->walkAnimTime * 8.0f) * 0.18f
+            : std::sin(enemy->walkAnimTime * 1.7f) * 0.01f;
+        float targetPitch = moving
+            ? std::sin(enemy->walkAnimTime * 4.2f) * 0.04f
+            : 0.0f;
+
+        float blend = glm::clamp(dt * 10.0f, 0.0f, 1.0f);
+        entity->localTransform.rotation.z = glm::mix(entity->localTransform.rotation.z, targetRoll, blend);
+        entity->localTransform.rotation.x = glm::mix(entity->localTransform.rotation.x, targetPitch, blend);
+
+        // Keep constant scale to avoid bounce/jump-looking silhouette changes.
+        entity->localTransform.scale = glm::vec3(1.0f);
+    }
 
     // Set horizontal velocity toward target (gravity handled separately)
     void setHorizontalVelocity(EnemyComponent* enemy, glm::vec3 pos, glm::vec3 target) {

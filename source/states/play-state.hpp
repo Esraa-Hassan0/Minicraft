@@ -17,6 +17,7 @@
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
 #include <components/player.hpp>
+#include <components/enemy-component.hpp>
 #include <audio/audio.hpp>
 #include <unordered_map>
 #include <vector>
@@ -47,6 +48,14 @@ class Playstate : public our::State {
     our::Entity* highlightEdgesEntity = nullptr; // Clean square borders
     our::Mesh* highlightEdgesMesh = nullptr;     // Line-based mesh for borders
     our::Entity* portalEntity = nullptr;         // Win-condition portal
+    our::Entity* firstPersonRightArm = nullptr;
+    our::Entity* firstPersonLeftArm = nullptr;
+    float firstPersonAnimTime = 0.0f;
+    float firstPersonAttackTimer = 0.0f;
+    float meleeCooldown = 0.0f;
+    const float meleeCooldownDuration = 0.24f;
+    const float meleeRange = 3.0f;
+    const float meleeDamage = 8.0f;
     BlockInteractionSystem blockInteraction;
     our::EnemySystem enemySystem;
 
@@ -101,6 +110,135 @@ class Playstate : public our::State {
             if (camera && player) return entity;
         }
         return nullptr;
+    }
+
+    static bool rayIntersectsAABB(const glm::vec3& origin, const glm::vec3& dir,
+                                  const glm::vec3& boxMin, const glm::vec3& boxMax,
+                                  float maxDistance, float& outT) {
+        float tMin = 0.0f;
+        float tMax = maxDistance;
+
+        for (int axis = 0; axis < 3; ++axis) {
+            float o = origin[axis];
+            float d = dir[axis];
+            float mn = boxMin[axis];
+            float mx = boxMax[axis];
+
+            if (std::abs(d) < 1e-6f) {
+                if (o < mn || o > mx) return false;
+                continue;
+            }
+
+            float invD = 1.0f / d;
+            float t1 = (mn - o) * invD;
+            float t2 = (mx - o) * invD;
+            if (t1 > t2) std::swap(t1, t2);
+
+            tMin = std::max(tMin, t1);
+            tMax = std::min(tMax, t2);
+            if (tMax < tMin) return false;
+        }
+
+        outT = tMin;
+        return tMin <= maxDistance;
+    }
+
+    our::Entity* findEnemyInCrosshair(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
+                                      float maxDistance, float& hitDistance) {
+        our::Entity* nearest = nullptr;
+        hitDistance = maxDistance;
+
+        for (auto entity : engineWorld.getEntities()) {
+            auto* enemy = entity->getComponent<our::EnemyComponent>();
+            if (!enemy || enemy->state == our::EnemyState::DEAD || enemy->health <= 0.0f) continue;
+
+            glm::vec3 basePos = entity->localTransform.position;
+            glm::vec3 boxMin = basePos + enemy->colliderCenter - enemy->colliderHalfSize;
+            glm::vec3 boxMax = basePos + enemy->colliderCenter + enemy->colliderHalfSize;
+
+            float t = 0.0f;
+            if (rayIntersectsAABB(rayOrigin, rayDir, boxMin, boxMax, maxDistance, t) && t < hitDistance) {
+                nearest = entity;
+                hitDistance = t;
+            }
+        }
+
+        return nearest;
+    }
+
+    bool tryMeleeAttack(const glm::vec3& rayOrigin, const glm::vec3& rayDir) {
+        if (meleeCooldown > 0.0f) return false;
+
+        float hitDistance = meleeRange;
+        our::Entity* enemyEntity = findEnemyInCrosshair(rayOrigin, glm::normalize(rayDir), meleeRange, hitDistance);
+        if (!enemyEntity) return false;
+
+        auto* enemy = enemyEntity->getComponent<our::EnemyComponent>();
+        if (!enemy) return false;
+
+        enemy->health -= meleeDamage;
+        enemy->state = our::EnemyState::CHASE;
+
+        glm::vec3 knockDir = glm::normalize(glm::vec3(rayDir.x, 0.0f, rayDir.z));
+        if (glm::length(knockDir) > 0.0001f) {
+            enemy->velocity.x += knockDir.x * 3.0f;
+            enemy->velocity.z += knockDir.z * 3.0f;
+        }
+
+        firstPersonAttackTimer = 0.22f;
+        meleeCooldown = meleeCooldownDuration;
+        our::AudioSystem::playSound("assets/sounds/Hit.wav");
+        return true;
+    }
+
+    void setupFirstPersonRig(our::Entity* playerEntity) {
+        if (!playerEntity) return;
+
+        auto* cube = our::AssetLoader<our::Mesh>::get("cube");
+        auto* skin = our::AssetLoader<our::Material>::get("steve-skin");
+
+        firstPersonRightArm = engineWorld.add();
+        firstPersonRightArm->name = "fp-right-arm";
+        firstPersonRightArm->parent = playerEntity;
+        firstPersonRightArm->localTransform.position = glm::vec3(0.27f, -0.24f, -0.38f);
+        firstPersonRightArm->localTransform.rotation = glm::vec3(-0.55f, 0.20f, 0.05f);
+        firstPersonRightArm->localTransform.scale = glm::vec3(0.09f, 0.28f, 0.09f);
+        auto* rightRenderer = firstPersonRightArm->addComponent<our::MeshRendererComponent>();
+        rightRenderer->mesh = cube;
+        rightRenderer->material = skin ? skin : our::AssetLoader<our::Material>::get("default");
+
+        firstPersonLeftArm = engineWorld.add();
+        firstPersonLeftArm->name = "fp-left-arm";
+        firstPersonLeftArm->parent = playerEntity;
+        firstPersonLeftArm->localTransform.position = glm::vec3(-0.27f, -0.25f, -0.40f);
+        firstPersonLeftArm->localTransform.rotation = glm::vec3(-0.58f, -0.18f, -0.04f);
+        firstPersonLeftArm->localTransform.scale = glm::vec3(0.09f, 0.26f, 0.09f);
+        auto* leftRenderer = firstPersonLeftArm->addComponent<our::MeshRendererComponent>();
+        leftRenderer->mesh = cube;
+        leftRenderer->material = skin ? skin : our::AssetLoader<our::Material>::get("default");
+    }
+
+    void updateFirstPersonRig(our::Entity* playerEntity, our::PlayerComponent* player, float dt) {
+        if (!playerEntity || !player || !firstPersonRightArm || !firstPersonLeftArm) return;
+
+        firstPersonAnimTime += dt;
+        float speed = glm::length(glm::vec2(player->velocity.x, player->velocity.z));
+        float walkFactor = glm::clamp(speed / 4.5f, 0.0f, 1.0f);
+        float bob = std::sin(firstPersonAnimTime * 8.0f) * 0.012f * walkFactor;
+
+        float punch = 0.0f;
+        if (firstPersonAttackTimer > 0.0f) {
+            float ratio = 1.0f - (firstPersonAttackTimer / 0.22f);
+            punch = std::sin(ratio * 3.14159f);
+            firstPersonAttackTimer -= dt;
+            if (firstPersonAttackTimer < 0.0f) firstPersonAttackTimer = 0.0f;
+        }
+
+        firstPersonRightArm->localTransform.position = glm::vec3(0.27f, -0.24f + bob - punch * 0.09f, -0.38f + punch * 0.05f);
+        firstPersonRightArm->localTransform.rotation = glm::vec3(-0.55f - punch * 1.25f, 0.20f + punch * 0.18f, 0.05f + punch * 0.15f);
+
+        firstPersonLeftArm->localTransform.position = glm::vec3(-0.27f, -0.25f + bob * 0.8f, -0.40f + punch * 0.01f);
+        firstPersonLeftArm->localTransform.rotation = glm::vec3(-0.58f - punch * 0.35f, -0.18f, -0.04f - punch * 0.06f);
     }
 
     our::Material* getMaterialForBlockType(int blockType) {
@@ -303,6 +441,7 @@ class Playstate : public our::State {
                     pos.y = y + 2.5f; break;
                 }
             }
+            setupFirstPersonRig(playerEntity);
         }
 
         // Spawn portal entity for win condition
@@ -449,6 +588,11 @@ class Playstate : public our::State {
         our::Entity *playerEntity = findPlayerEntity();
         our::PlayerComponent* currentPlayer = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
 
+        if (meleeCooldown > 0.0f) {
+            meleeCooldown -= (float)deltaTime;
+            if (meleeCooldown < 0.0f) meleeCooldown = 0.0f;
+        }
+
         // ── Game-over check: skip game logic when not playing ──
         if (currentPlayer && currentPlayer->gameState != our::GameState::PLAYING) {
             // Still render but freeze logic
@@ -478,6 +622,7 @@ class Playstate : public our::State {
                     currentPlayer->healCooldown -= (float)deltaTime;
             }
             streamChunksAroundPlayer(playerEntity->localTransform.position);
+            updateFirstPersonRig(playerEntity, currentPlayer, (float)deltaTime);
         }
 
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
@@ -592,31 +737,33 @@ class Playstate : public our::State {
 
             // Break Block (disabled underwater)
             if (mouse.justPressed(0) && player && !player->isUnderwater) {
-                RayHit hit = terrainWorld.castRay(camPos, camDir);
-                if (hit.hit) {
-                    int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                    blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
+                if (!tryMeleeAttack(camPos, camDir)) {
+                    RayHit hit = terrainWorld.castRay(camPos, camDir);
+                    if (hit.hit) {
+                        int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
+                        blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
 
-                    if (blockInteraction.currentHits == 0) {
-                        // The block was completely broken
-                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                        if (blockInteraction.currentHits == 0) {
+                            // The block was completely broken
+                            our::AudioSystem::playSound("assets/sounds/Hit.wav");
 
-                        if (player) {
-                            registerCollectedBlock(player, type);
-                            // LEAF blocks give food
-                            if (type == voxel::LEAF) {
-                                player->foodCount++;
+                            if (player) {
+                                registerCollectedBlock(player, type);
+                                // LEAF blocks give food
+                                if (type == voxel::LEAF) {
+                                    player->foodCount++;
+                                }
                             }
+                        } else {
+                            // The block was hit but not broken
+                            if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
+                            else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
+                            else if (type == voxel::SAND) our::AudioSystem::playSound("assets/sounds/Sand.wav");
+                            else if (type == voxel::STONE) our::AudioSystem::playSound("assets/sounds/Stone.wav");
+                            else if (type == voxel::Glass) our::AudioSystem::playSound("assets/sounds/Glass.wav");
+                            else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
+                            else our::AudioSystem::playSound("assets/sounds/Hit.wav");
                         }
-                    } else {
-                        // The block was hit but not broken
-                        if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
-                        else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
-                        else if (type == voxel::SAND) our::AudioSystem::playSound("assets/sounds/Sand.wav");
-                        else if (type == voxel::STONE) our::AudioSystem::playSound("assets/sounds/Stone.wav");
-                        else if (type == voxel::Glass) our::AudioSystem::playSound("assets/sounds/Glass.wav");
-                        else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
-                        else our::AudioSystem::playSound("assets/sounds/Hit.wav");
                     }
                 }
             }

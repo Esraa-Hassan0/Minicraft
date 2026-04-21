@@ -66,6 +66,9 @@ namespace our {
         float     jumpCooldown     = 0.0f;   // seconds until next jump allowed
         float     stuckTimer       = 0.0f;   // accumulates while blocked
 
+        // Visual animation state
+        float walkAnimTime = 0.0f;
+
         static std::string getID() { return "EnemyComponent"; }
         void deserialize(const nlohmann::json& data) override {
             if (!data.is_object()) return;
