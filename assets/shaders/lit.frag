@@ -77,7 +77,10 @@ vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
         // Vector from surface to light position
         vec3 delta = L.position - fs_in.fragPos;
         float dist = length(delta);
-        lightDir = delta / dist;
+        if (dist > 0.0)
+            lightDir = delta / dist;
+        else
+            lightDir = vec3(0, 1, 0); // Fallback for light coinciding with fragment
 
         // Physical distance attenuation:
         // intensity = 1 / (c + l*d + q*d^2)
@@ -92,7 +95,8 @@ vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
             // Angle between light-to-surface and spotlight direction
             float theta = dot(lightDir, spotDir);
             // Smooth falloff between inner and outer cutoff (cosine values)
-            float epsilon = L.innerCutoff - L.outerCutoff;
+            // Added epsilon check to prevent division by zero for identical cutoffs
+            float epsilon = max(L.innerCutoff - L.outerCutoff, 0.0001);
             // Within cone: theta > outerCutoff, full intensity at innerCutoff
             attenuation *= clamp((theta - L.outerCutoff) / epsilon, 0.0, 1.0);
         }
@@ -104,11 +108,14 @@ vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
     // Diffuse: how much light hits the surface
     float diff = max(dot(N, lightDir), 0.0);
 
-    // Specular: reflection intensity
+    // Specular: reflection intensity.
     float specular = pow(max(dot(N, H), 0.0), shininess);
 
     // Combine lighting terms
-    vec3 ambientC = L.ambient * albedo;
+    // Ambient light is typically global/constant and shouldn't attenuate by distance (unlike local lights)
+    // However, if we want point light ambients to be local, they must attenuate.
+    // We compromise: directional light ambient is constant, others attenuate.
+    vec3 ambientC = L.ambient * albedo * attenuation;
     vec3 diffuseC = L.color * diff * albedo * attenuation;
     vec3 specularC = L.color * specular * spec * attenuation;
 
