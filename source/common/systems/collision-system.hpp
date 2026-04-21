@@ -19,6 +19,7 @@ namespace our {
 
             // Update velocities (apply gravity)
             for (auto entity : world->getEntities()) {
+                if (!entity) continue;
                 AABBColliderComponent* collider = entity->getComponent<AABBColliderComponent>();
                 PlayerComponent* player = entity->getComponent<PlayerComponent>();
 
@@ -59,6 +60,7 @@ namespace our {
 
             // Move entities and handle collisions
             for (auto entity : world->getEntities()) {
+                if (!entity) continue;
                 AABBColliderComponent* collider = entity->getComponent<AABBColliderComponent>();
                 
                 if (collider && collider->isPhysical) {
@@ -122,7 +124,7 @@ namespace our {
                     }
 
                     for (auto otherEntity : world->getEntities()) {
-                        if (otherEntity == entity) continue;
+                        if (!otherEntity || otherEntity == entity) continue;
 
                         AABBColliderComponent* otherCollider = otherEntity->getComponent<AABBColliderComponent>();
                         if (!otherCollider) continue;
@@ -210,7 +212,7 @@ namespace our {
                             }
 
                             for (auto otherEntity : world->getEntities()) {
-                                if (otherEntity == entity) continue;
+                                if (!otherEntity || otherEntity == entity) continue;
                                 
                                 AABBColliderComponent* otherCollider = otherEntity->getComponent<AABBColliderComponent>();
                                 if (!otherCollider || otherCollider->isTrigger) continue;

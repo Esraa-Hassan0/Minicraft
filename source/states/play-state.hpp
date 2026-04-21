@@ -16,7 +16,15 @@
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
 #include <components/player.hpp>
+#include <components/killable-npc.hpp>
+#include <components/npc-movement.hpp>
 #include <audio/audio.hpp>
+#include <unordered_map>
+#include <vector>
+#include <map>
+#include <random>
+#include <components/aabb-collider.hpp>
+#include <cstdio>
 #include <unordered_map>
 #include <vector>
 #include <cmath>
@@ -27,9 +35,21 @@
 #include <cstdio>
 
 class Playstate : public our::State {
+    struct NPCSpawnData {
+        int chunkX, chunkZ;
+        int localX, localY, localZ;
+        float scaleX, scaleY, scaleZ;
+        std::string meshName, matName;
+        int foodReward;
+        std::string npcType;
+        float speed, moveRadius, waitTime;
+        std::string movementType;
+    };
+
     struct ChunkRenderGroup {
         std::vector<our::Entity*> entities;
         std::vector<our::Mesh*> meshes;
+        std::vector<NPCSpawnData> npcs;
     };
 
     // Terrain and ECS Systems
@@ -54,6 +74,7 @@ class Playstate : public our::State {
     int currentCenterChunkZ = std::numeric_limits<int>::min();
     bool terrainMeshDirty = true;
     std::unordered_map<std::string, ChunkRenderGroup> chunkRenderGroups;
+    std::vector<NPCSpawnData> npcTemplates;
 
     // --- Inventory & Hotbar Helpers ---
     static constexpr int kHotbarSlots = 5;
@@ -93,6 +114,7 @@ class Playstate : public our::State {
 
     our::Entity* findPlayerEntity() {
         for (auto entity : engineWorld.getEntities()) {
+            if (!entity) continue;
             auto* camera = entity->getComponent<our::CameraComponent>();
             auto* player = entity->getComponent<our::PlayerComponent>();
             if (camera && player) return entity;
@@ -255,6 +277,240 @@ class Playstate : public our::State {
         dl->AddRect(iconMin, iconMax, outline, 4.0f, ImDrawCornerFlags_All, 1.25f);
     }
 
+    void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
+        if (!npcEntity || !player) return;
+        auto* killable = npcEntity->getComponent<our::KillableNPCComponent>();
+        if (killable) {
+            player->meatCount += killable->foodReward;
+        }
+        engineWorld.markForRemoval(npcEntity);
+    }
+
+    our::Entity* findHitNPC(const glm::vec3& camPos, const glm::vec3& camDir, float maxDist) {
+        float closestDist = maxDist;
+        our::Entity* closestNPC = nullptr;
+
+        for (auto entity : engineWorld.getEntities()) {
+            if (!entity) continue;
+            auto* killable = entity->getComponent<our::KillableNPCComponent>();
+            if (!killable) continue;
+
+            glm::vec3 npcPos = entity->localTransform.position;
+            glm::vec3 toNPC = npcPos - camPos;
+            float t = glm::dot(toNPC, camDir);
+            if (t < 0.0f) continue;
+
+            glm::vec3 closestPoint = camPos + camDir * t;
+            glm::vec3 diff = closestPoint - npcPos;
+            float distSq = glm::dot(diff, diff);
+            float radius = 0.5f;
+
+            if (distSq < radius * radius && t < closestDist) {
+                closestDist = t;
+                closestNPC = entity;
+            }
+        }
+        return closestNPC;
+    }
+
+    void updateMeatDecay(our::PlayerComponent* player, float deltaTime) {
+        if (!player) return;
+        player->meatDecayTimer += deltaTime;
+        if (player->meatDecayTimer >= 20.0f) {
+            player->meatDecayTimer = 0.0f;
+            if (player->meatCount > 0) {
+                player->meatCount = std::max(0, player->meatCount - 1);
+            } else {
+                player->health = std::max(0.0f, player->health - 10.0f);
+                player->meatCount = player->meatMax;
+                if (player->health <= 0.0f) {
+                    player->isAlive = false;
+                    player->gameState = our::GameState::LOSE;
+                }
+            }
+        }
+    }
+
+    void updateNPCMovement(our::Entity* playerEntity, float deltaTime) {
+        if (!playerEntity) return;
+        glm::vec3 playerPos = playerEntity->localTransform.position;
+
+        for (auto entity : engineWorld.getEntities()) {
+            if (!entity) continue;
+            auto* movement = entity->getComponent<our::NPCMovementComponent>();
+            auto* killable = entity->getComponent<our::KillableNPCComponent>();
+            if (!movement || !killable) continue;
+
+            switch (movement->movementType) {
+                case our::NPCMovementComponent::MovementType::IDLE:
+                    break;
+
+                case our::NPCMovementComponent::MovementType::RANDOM_WALK:
+                    if (!movement->isMoving) {
+                        movement->waitTimer += deltaTime;
+                        if (movement->waitTimer >= movement->waitTime) {
+                            float angle = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f * 3.14159265f;
+                            float dist = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * movement->moveRadius;
+                            glm::vec3 offset(std::cos(angle) * dist, 0.0f, std::sin(angle) * dist);
+                            glm::vec3 newPos = movement->startPosition + offset;
+                            if (isValidNPCPosition(entity, newPos)) {
+                                movement->targetPosition = newPos;
+                                movement->isMoving = true;
+                            }
+                            movement->waitTimer = 0.0f;
+                        }
+                    } else {
+                        glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
+                        float dist = glm::length(dir);
+                        if (dist > 0.1f) {
+                            glm::vec3 moveDir = glm::normalize(dir);
+                            glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                            if (isValidNPCPosition(entity, newPos)) {
+                                entity->localTransform.position = newPos;
+                            } else {
+                                movement->blockedAttempts++;
+                                if (movement->blockedAttempts > 3) {
+                                    movement->isMoving = false;
+                                    movement->blockedAttempts = 0;
+                                }
+                            }
+                        } else {
+                            movement->isMoving = false;
+                        }
+                    }
+                    break;
+
+                case our::NPCMovementComponent::MovementType::PATROL:
+                    if (!movement->isMoving) {
+                        movement->waitTimer += deltaTime;
+                        if (movement->waitTimer >= movement->waitTime) {
+                            glm::vec3 dir = movement->targetPosition - movement->startPosition;
+                            if (glm::length(dir) > movement->moveRadius || glm::length(entity->localTransform.position - movement->targetPosition) < 0.1f) {
+                                movement->targetPosition = movement->startPosition;
+                            }
+                            glm::vec3 newTarget = movement->targetPosition + dir;
+                            if (isValidNPCPosition(entity, newTarget)) {
+                                movement->targetPosition = newTarget;
+                                movement->isMoving = true;
+                            }
+                            movement->waitTimer = 0.0f;
+                        }
+                    } else {
+                        glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
+                        float dist = glm::length(dir);
+                        if (dist > 0.1f) {
+                            glm::vec3 moveDir = glm::normalize(dir);
+                            glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                            if (isValidNPCPosition(entity, newPos)) {
+                                entity->localTransform.position = newPos;
+                            }
+                        } else {
+                            movement->isMoving = false;
+                        }
+                    }
+                    break;
+
+                case our::NPCMovementComponent::MovementType::FOLLOW_PLAYER: {
+                    glm::vec3 toPlayer = playerPos - entity->localTransform.position;
+                    float distToPlayer = glm::length(toPlayer);
+                    if (distToPlayer > 2.0f) {
+                        glm::vec3 moveDir = glm::normalize(toPlayer);
+                        glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                        if (isValidNPCPosition(entity, newPos)) {
+                            entity->localTransform.position = newPos;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    bool isValidNPCPosition(our::Entity* entity, const glm::vec3& newPos) {
+        auto* aabb = entity->getComponent<our::AABBColliderComponent>();
+        if (!aabb) return true;
+
+        glm::vec3 min = aabb->getMinCorner(newPos);
+        glm::vec3 max = aabb->getMaxCorner(newPos);
+
+        int minX = static_cast<int>(std::floor(min.x));
+        int minY = static_cast<int>(std::floor(min.y));
+        int minZ = static_cast<int>(std::floor(min.z));
+        int maxX = static_cast<int>(std::floor(max.x));
+        int maxY = static_cast<int>(std::floor(max.y));
+        int maxZ = static_cast<int>(std::floor(max.z));
+
+        for (int x = minX; x <= maxX; ++x) {
+            for (int y = minY; y <= maxY; ++y) {
+                for (int z = minZ; z <= maxZ; ++z) {
+                    int block = terrainWorld.getBlock(x, y, z);
+                    if (block != 0) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    void spawnNPCs() {
+        if (npcTemplates.empty()) return;
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> npcCountDist(10, 30);
+        std::uniform_int_distribution<> templateDist(0, (int)npcTemplates.size() - 1);
+
+        int numNPCs = npcCountDist(gen);
+
+        for (int i = 0; i < numNPCs; ++i) {
+            int cx = currentCenterChunkX;
+            int cz = currentCenterChunkZ;
+
+            std::uniform_int_distribution<> localDist(0, voxel::Chunk::CHUNK_SIZE - 1);
+            int lx = localDist(gen);
+            int ly = terrainWorld.height - 1;
+            int lz = localDist(gen);
+
+            while (ly >= 0 && terrainWorld.getBlock(cx * voxel::Chunk::CHUNK_SIZE + lx, ly, cz * voxel::Chunk::CHUNK_SIZE + lz) == 0) {
+                ly--;
+            }
+            if (ly < 0) continue;
+
+            float worldX = cx * voxel::Chunk::CHUNK_SIZE + lx + 0.5f;
+            float worldY = ly + 1.5f;
+            float worldZ = cz * voxel::Chunk::CHUNK_SIZE + lz + 0.5f;
+
+            // Pick a template
+            const auto& templateData = npcTemplates[templateDist(gen)];
+
+            our::Entity* npcEntity = engineWorld.add();
+            npcEntity->localTransform.position = glm::vec3(worldX, worldY, worldZ);
+            npcEntity->localTransform.scale = glm::vec3(templateData.scaleX, templateData.scaleY, templateData.scaleZ);
+
+            auto* meshRenderer = npcEntity->addComponent<our::MeshRendererComponent>();
+            meshRenderer->mesh = our::AssetLoader<our::Mesh>::get(templateData.meshName);
+            meshRenderer->material = our::AssetLoader<our::Material>::get(templateData.matName);
+
+            auto* aabb = npcEntity->addComponent<our::AABBColliderComponent>();
+            aabb->center = glm::vec3(0.0f, 0.9f, 0.0f);
+            aabb->halfSize = glm::vec3(0.4f, 0.9f, 0.4f) * npcEntity->localTransform.scale[1] / 0.1f; // Scale hitboxes if needed
+
+            auto* movement = npcEntity->addComponent<our::NPCMovementComponent>();
+            movement->startPosition = npcEntity->localTransform.position;
+            movement->speed = templateData.speed;
+            movement->moveRadius = templateData.moveRadius;
+            movement->waitTime = templateData.waitTime;
+
+            if (templateData.movementType == "idle") movement->movementType = our::NPCMovementComponent::MovementType::IDLE;
+            else if (templateData.movementType == "patrol") movement->movementType = our::NPCMovementComponent::MovementType::PATROL;
+            else if (templateData.movementType == "follow_player") movement->movementType = our::NPCMovementComponent::MovementType::FOLLOW_PLAYER;
+            else movement->movementType = our::NPCMovementComponent::MovementType::RANDOM_WALK;
+
+            auto* killable = npcEntity->addComponent<our::KillableNPCComponent>();
+            killable->foodReward = templateData.foodReward;
+            killable->npcType = templateData.npcType;
+        }
+    }
+
     // --- State Overrides ---
     void onInitialize() override {
         auto &config = getApp()->getConfig()["scene"];
@@ -265,6 +521,47 @@ class Playstate : public our::State {
             terrainWorld.deserialize(terrainConfig);
             chunkLoadRadius = terrainConfig.value("chunk-load-radius", chunkLoadRadius);
             chunkUnloadRadius = std::max(terrainConfig.value("chunk-unload-radius", chunkLoadRadius + 1), chunkLoadRadius);
+        }
+
+        if (config.contains("npcTypes") && config["npcTypes"].is_array()) {
+            for (const auto& npcTypeJson : config["npcTypes"]) {
+                if (!npcTypeJson.is_object()) continue;
+
+                NPCSpawnData templateData;
+                templateData.meshName = npcTypeJson.value("mesh", "cube");
+                templateData.matName = npcTypeJson.value("material", "default");
+                
+                if (npcTypeJson.contains("scale") && npcTypeJson["scale"].is_array() && npcTypeJson["scale"].size() >= 3) {
+                    templateData.scaleX = npcTypeJson["scale"][0].get<float>();
+                    templateData.scaleY = npcTypeJson["scale"][1].get<float>();
+                    templateData.scaleZ = npcTypeJson["scale"][2].get<float>();
+                } else {
+                    templateData.scaleX = templateData.scaleY = templateData.scaleZ = 1.0f;
+                }
+                
+                if (npcTypeJson.contains("components") && npcTypeJson["components"].is_object()) {
+                    const auto& comp = npcTypeJson["components"];
+                    templateData.foodReward = comp.value("foodReward", 1);
+                    templateData.npcType = comp.value("npcType", "default");
+                } else {
+                    templateData.foodReward = 1;
+                    templateData.npcType = "default";
+                }
+
+                if (npcTypeJson.contains("movement") && npcTypeJson["movement"].is_object()) {
+                    const auto& mov = npcTypeJson["movement"];
+                    templateData.speed = mov.value("speed", 1.0f);
+                    templateData.moveRadius = mov.value("moveRadius", 5.0f);
+                    templateData.waitTime = mov.value("waitTime", 2.0f);
+                    templateData.movementType = mov.value("movementType", "random_walk");
+                } else {
+                    templateData.speed = 1.0f;
+                    templateData.moveRadius = 5.0f;
+                    templateData.waitTime = 2.0f;
+                    templateData.movementType = "random_walk";
+                }
+                npcTemplates.push_back(templateData);
+            }
         }
 
         cameraController.enter(getApp());
@@ -301,6 +598,12 @@ class Playstate : public our::State {
             }
         }
         if (terrainMeshDirty) rebuildMesh();
+        spawnNPCs();
+        for (auto entity : engineWorld.getEntities()) {
+            if (!entity) continue;
+            auto* npcMove = entity->getComponent<our::NPCMovementComponent>();
+            if (npcMove) npcMove->startPosition = entity->localTransform.position;
+        }
     }
 
     void onImmediateGui() override {
@@ -340,24 +643,34 @@ class Playstate : public our::State {
             ImGui::End();
         }
 
-        // 2. Draw Health
+// 2 & 3. Draw Health and Meat Bars in one row, centered
         our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
-        if (heartsTex) {
-            ImDrawList* fgDl = ImGui::GetForegroundDrawList();
+        our::Texture2D* meatTex = our::AssetLoader<our::Texture2D>::get("meats");
+        if (heartsTex && meatTex && player) {
+            ImDrawList* barDl = ImGui::GetForegroundDrawList();
             float heartSize = 28.0f;
             float heartGap = 2.0f;
             float maxHearts = 10;
-            float totalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
-            float startX = displaySize.x * 0.5f - totalW * 0.5f;
-            float invH = 60.0f + 26.0f; // hotbar frame height
-            float startY = displaySize.y - invH - 16.0f - heartSize - 12.0f;
-                
-            ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
+            float heartTotalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
+            
+            float meatSize = 28.0f;
+            float meatGap = 2.0f;
+            float maxMeat = player->meatMax;
+            float meatTotalW = maxMeat * meatSize + (maxMeat - 1) * meatGap;
+            
+            float barSpacing = 12.0f; // Space between heart and meat bars
+            float bothTotalW = heartTotalW + meatTotalW + barSpacing;
+            
+            float startY = displaySize.y - 60.0f - 26.0f - 16.0f - heartSize - 8.0f; // Position above hotbar
+            float startX = displaySize.x * 0.5f - bothTotalW * 0.5f;
+            
+            // Draw Hearts Bar
+            ImTextureID heartsTexID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
             float texW = 45.0f;
-
+            
             int fullHearts = static_cast<int>(player->health / 10.0f);
             float partialHeart = (player->health / 10.0f) - fullHearts;
-
+            
             ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
             ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
             ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
@@ -367,19 +680,38 @@ class Playstate : public our::State {
                 ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
                 ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
                 if (i < fullHearts) {
-                    fgDl->AddImage(texID, pMin, pMax, uvFull0, uvFull1);
+                    barDl->AddImage(heartsTexID, pMin, pMax, uvFull0, uvFull1);
                 } else if (i == fullHearts && partialHeart > 0.0f) {
                     ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
                     ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
-                    fgDl->AddImage(texID, pMin, splitX, uvFull0, uvFull1);
-                    fgDl->AddImage(texID, splitX1, pMax, uvEmpty0, uvEmpty1);
+                    barDl->AddImage(heartsTexID, pMin, splitX, uvFull0, uvFull1);
+                    barDl->AddImage(heartsTexID, splitX1, pMax, uvEmpty0, uvEmpty1);
                 } else {
-                    fgDl->AddImage(texID, pMin, pMax, uvEmpty0, uvEmpty1);
+                    barDl->AddImage(heartsTexID, pMin, pMax, uvEmpty0, uvEmpty1);
+                }
+            }
+            
+            // Draw Meat Bar (starts after hearts with spacing)
+            ImTextureID meatTexID = (ImTextureID)(intptr_t)meatTex->getOpenGLName();
+            
+            ImVec2 mUvFull0((27.0f + 0.5f) / texW, 1.0f);
+            ImVec2 mUvFull1((36.0f - 0.5f) / texW, 0.0f);
+            ImVec2 mUvEmpty0((0.0f + 0.5f) / texW, 1.0f);
+            ImVec2 mUvEmpty1((9.0f - 0.5f) / texW, 0.0f);
+
+            float meatStartX = startX + heartTotalW + barSpacing;
+            for (int i = 0; i < maxMeat; ++i) {
+                ImVec2 pMin(meatStartX + i * (meatSize + meatGap), startY);
+                ImVec2 pMax(pMin.x + meatSize, pMin.y + meatSize);
+                if (i < player->meatCount) {
+                    barDl->AddImage(meatTexID, pMin, pMax, mUvFull0, mUvFull1);
+                } else {
+                    barDl->AddImage(meatTexID, pMin, pMax, mUvEmpty0, mUvEmpty1);
                 }
             }
         }
 
-        // 2. Draw Crosshair
+        // 4. Draw Crosshair
         ImDrawList* drawList = ImGui::GetForegroundDrawList();
         ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
         drawList->AddLine(ImVec2(center.x - 8, center.y), ImVec2(center.x + 8, center.y), IM_COL32(255, 255, 255, 220), 2.0f);
@@ -425,6 +757,8 @@ class Playstate : public our::State {
                 player->waterDamageTimer = 0.0f;
             }
 
+            updateMeatDecay(player, (float)deltaTime);
+
             // Dynamic ambient sound based on distance to nearest water
             float maxRadius = 10.0f;
             float minDistanceSq = maxRadius * maxRadius;
@@ -458,6 +792,8 @@ class Playstate : public our::State {
             our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
         }
         
+        updateNPCMovement(playerEntity, (float)deltaTime);
+        
         auto &mouse = getApp()->getMouse();
         if (playerEntity) {
             glm::mat4 camMat = playerEntity->localTransform.toMat4();
@@ -476,10 +812,15 @@ class Playstate : public our::State {
                 if (highlightEdgesEntity) highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
             }
 
-            // Break Block (disabled underwater)
+            // Break Block / Kill NPC (disabled underwater)
             if (mouse.justPressed(0) && player && !player->isUnderwater) {
-                RayHit hit = terrainWorld.castRay(camPos, camDir);
-                if (hit.hit) {
+                our::Entity* hitNPC = findHitNPC(camPos, camDir, 5.0f);
+                if (hitNPC) {
+                    killNPCAndAwardMeat(hitNPC, player);
+                    our::AudioSystem::playSound("assets/sounds/Death.wav");
+                } else {
+                    RayHit hit = terrainWorld.castRay(camPos, camDir);
+                    if (hit.hit) {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
                     blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
 
@@ -498,6 +839,7 @@ class Playstate : public our::State {
                         else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
                         else our::AudioSystem::playSound("assets/sounds/Hit.wav");
                     }
+                }
                 }
             }
             // Place Block (disabled underwater)

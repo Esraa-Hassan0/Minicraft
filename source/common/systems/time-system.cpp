@@ -27,6 +27,7 @@ namespace our
 
         for (auto entity : world->getEntities())
         {
+            if (!entity) continue;
             if (entity->name == "sun")
             {
                 sunEntity = entity;

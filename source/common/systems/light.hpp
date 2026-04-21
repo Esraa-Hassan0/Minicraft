@@ -13,6 +13,7 @@ namespace our
         {
             for (auto entity : world->getEntities())
             {
+                if (!entity) continue;
                 LightComponent *light = entity->getComponent<LightComponent>();
                 if (!light || !light->enabled)
                     continue;
