@@ -69,6 +69,10 @@ namespace our {
         // Visual animation state
         float walkAnimTime = 0.0f;
 
+        // Visual hit feedback (Minecraft-like red flash)
+        float hurtFlashTimer = 0.0f;
+        float hurtFlashDuration = 0.18f;
+
         static std::string getID() { return "EnemyComponent"; }
         void deserialize(const nlohmann::json& data) override {
             if (!data.is_object()) return;

@@ -19,6 +19,7 @@ namespace our
     struct RenderCommand {
         glm::mat4 localToWorld;
         glm::vec3 center;
+        Entity* owner;
         Mesh* mesh;
         Material* material;
     };

@@ -375,21 +375,15 @@
                 }]
             },
             {
-                "position": [0, 50, -50],
-                "scale": [2.0, 2.0, 2.0],
+                "position": [0, 0, 0],
+                "rotation": [45, -35, 0],
                 "name": "sun",
                 "components": [
                     {
-                        "type": "Mesh Renderer",
-                        "mesh": "cube",
-                        "material": "sun-material"
-                    },
-                    {
                         "type": "Light",
-                        "lightType": "point",
+                        "lightType": "directional",
                         "color": [1.0, 0.95, 0.8],
-                        "ambient": [0.6, 0.6, 0.5],
-                        "attenuation": [1.0, 0.02, 0.001],
+                        "ambient": [0.3, 0.3, 0.25],
                         "enabled": true
                     }
                 ]

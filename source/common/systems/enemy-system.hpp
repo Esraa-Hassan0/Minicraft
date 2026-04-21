@@ -239,6 +239,15 @@ private:
         return count;
     }
 
+    int countLivingEnemiesOfType(World* world, EnemyType type) {
+        int count = 0;
+        for (auto* e : world->getEntities()) {
+            auto* en = e->getComponent<EnemyComponent>();
+            if (en && en->state != EnemyState::DEAD && en->type == type) count++;
+        }
+        return count;
+    }
+
     // ══════════════════════════════════════════════════════════
     //  AABB terrain collision for enemies (per-axis sweep)
     //  Inspired by ourCraft's performCollision() pattern.
@@ -387,11 +396,39 @@ private:
         return bt != 0 && bt != voxel::WATER;
     }
 
+    bool tryStepUpObstacle(voxel::World* terrain, glm::vec3& pos, EnemyComponent* enemy, const glm::vec3& moveDir)
+    {
+        if (!terrain) return false;
+
+        glm::vec3 ahead = pos + moveDir * 0.65f;
+        int bx = (int)std::floor(ahead.x);
+        int bz = (int)std::floor(ahead.z);
+        int footY = (int)std::floor(pos.y + 0.05f);
+
+        bool wallAhead = isSolidAt(terrain, bx, footY, bz);
+        bool clearAbove = !isSolidAt(terrain, bx, footY + 1, bz) && !isSolidAt(terrain, bx, footY + 2, bz);
+        if (!wallAhead || !clearAbove) return false;
+
+        // Try stepping up by one block instead of hard jumping to avoid jitter on level transitions.
+        glm::vec3 candidate = pos + glm::vec3(moveDir.x * 0.25f, 1.02f, moveDir.z * 0.25f);
+        if (collidesWithTerrain(candidate, enemy->colliderCenter, enemy->colliderHalfSize, terrain)) return false;
+
+        pos = candidate;
+        enemy->velocity.y = 0.0f;
+        enemy->isGrounded = true;
+        enemy->jumpCooldown = 0.28f;
+        enemy->stuckTimer = 0.0f;
+        return true;
+    }
+
     // ── Spawning ──────────────────────────────────────────────
     void trySpawnWave(World* world, voxel::World* terrain, glm::vec3 playerPos) {
         waveNumber++;
         int living = countLivingEnemies(world);
         if (living >= maxEnemies) return;
+
+        int livingCreepers = countLivingEnemiesOfType(world, EnemyType::CREEPER);
+        bool forceCreeper = (waveNumber >= 2 && livingCreepers == 0);
 
         // Minecraft-like pacing: many checks fail, and successful checks spawn small groups.
         if ((std::rand() % 100) < 45) return;
@@ -404,16 +441,27 @@ private:
 
         for (int i = 0; i < toSpawn; i++) {
             EnemyType type;
-            int roll = std::rand() % 10;
-            if      (roll < 5)                    type = EnemyType::ZOMBIE;
-            else if (roll < 8 || waveNumber < 2)  type = EnemyType::SKELETON;
-            else                                   type = EnemyType::CREEPER;
+            if (forceCreeper && i == 0) {
+                type = EnemyType::CREEPER;
+            } else {
+                int roll = std::rand() % 100;
+                if (waveNumber < 2) {
+                    type = (roll < 65) ? EnemyType::ZOMBIE : EnemyType::SKELETON;
+                } else {
+                    if      (roll < 40) type = EnemyType::ZOMBIE;
+                    else if (roll < 70) type = EnemyType::SKELETON;
+                    else                type = EnemyType::CREEPER;
+                }
+            }
 
-            spawnEnemy(world, terrain, playerPos, type);
+            bool spawned = spawnEnemy(world, terrain, playerPos, type);
+            if (spawned && type == EnemyType::CREEPER) {
+                forceCreeper = false;
+            }
         }
     }
 
-    void spawnEnemy(World* world, voxel::World* terrain, glm::vec3 playerPos, EnemyType type) {
+    bool spawnEnemy(World* world, voxel::World* terrain, glm::vec3 playerPos, EnemyType type) {
         glm::vec3 spawnPos(0.0f);
         bool foundSpawn = false;
 
@@ -466,7 +514,7 @@ private:
             }
         }
 
-        if (!foundSpawn) return;
+        if (!foundSpawn) return false;
 
         Entity* entity = world->add();
         entity->name   = (type == EnemyType::ZOMBIE)   ? "zombie"   :
@@ -521,6 +569,8 @@ private:
                 if (!mr->material) mr->material = AssetLoader<Material>::get("default");
                 break;
         }
+
+            return true;
     }
 
     Mesh* getMeshForType(EnemyType type) {
@@ -550,6 +600,10 @@ private:
             return;
         }
 
+        if (enemy->hurtFlashTimer > 0.0f) {
+            enemy->hurtFlashTimer = std::max(0.0f, enemy->hurtFlashTimer - dt);
+        }
+
         glm::vec3& pos = entity->localTransform.position;
         float distToPlayer = glm::length(glm::vec2(playerPos.x - pos.x, playerPos.z - pos.z));
 
@@ -566,7 +620,7 @@ private:
             tickSkeleton(world, entity, enemy, player, playerEntity, playerPos, distToPlayer, dt);
             break;
         case EnemyType::CREEPER:
-            tickCreeper(world, terrain, entity, enemy, player, playerPos, distToPlayer, dt, terrainMeshDirty);
+            tickCreeper(world, terrain, entity, enemy, player, playerEntity, playerPos, distToPlayer, dt, terrainMeshDirty);
             break;
         }
 
@@ -581,23 +635,25 @@ private:
             float movLen = glm::length(moveDir);
             if (movLen > 0.65f) {
                 moveDir /= movLen;
-                glm::vec3 ahead = pos + moveDir * 0.7f;
-                int bx = (int)std::floor(ahead.x);
-                int bz = (int)std::floor(ahead.z);
-                int footY = (int)std::floor(pos.y + 0.05f);
+                if (!tryStepUpObstacle(terrain, pos, enemy, moveDir)) {
+                    glm::vec3 ahead = pos + moveDir * 0.7f;
+                    int bx = (int)std::floor(ahead.x);
+                    int bz = (int)std::floor(ahead.z);
+                    int footY = (int)std::floor(pos.y + 0.05f);
 
-                int blockAhead = terrain->getBlock(bx, footY, bz);
-                int blockAbove = terrain->getBlock(bx, footY + 1, bz);
-                int blockAboveAbove = terrain->getBlock(bx, footY + 2, bz);
+                    int blockAhead = terrain->getBlock(bx, footY, bz);
+                    int blockAbove = terrain->getBlock(bx, footY + 1, bz);
+                    int blockAboveAbove = terrain->getBlock(bx, footY + 2, bz);
 
-                bool wallAhead = (blockAhead != voxel::AIR && blockAhead != voxel::WATER);
-                bool clearAbove = (blockAbove == voxel::AIR || blockAbove == voxel::WATER);
-                bool clearAboveAbove = (blockAboveAbove == voxel::AIR || blockAboveAbove == voxel::WATER);
+                    bool wallAhead = (blockAhead != voxel::AIR && blockAhead != voxel::WATER);
+                    bool clearAbove = (blockAbove == voxel::AIR || blockAbove == voxel::WATER);
+                    bool clearAboveAbove = (blockAboveAbove == voxel::AIR || blockAboveAbove == voxel::WATER);
 
-                if (wallAhead && clearAbove && clearAboveAbove) {
-                    enemy->velocity.y = std::max(enemy->velocity.y, 6.8f);
-                    enemy->jumpCooldown = 0.85f;
-                    enemy->stuckTimer = 0.0f;
+                    if (wallAhead && clearAbove && clearAboveAbove) {
+                        enemy->velocity.y = std::max(enemy->velocity.y, 5.9f);
+                        enemy->jumpCooldown = 0.82f;
+                        enemy->stuckTimer = 0.0f;
+                    }
                 }
             }
         }
@@ -739,7 +795,7 @@ private:
     void tickCreeper(
         World* world, voxel::World* terrain,
         Entity* entity, EnemyComponent* enemy,
-        PlayerComponent* player,
+        PlayerComponent* player, Entity* playerEntity,
         glm::vec3 playerPos, float dist, float dt,
         bool& terrainMeshDirty)
     {
@@ -748,7 +804,7 @@ private:
         if (enemy->health <= 0.0f) {
             if (!enemy->isLit) {
                 enemy->isLit = true;
-                explodeCreeper(entity, enemy, player, playerPos, terrain, terrainMeshDirty);
+                explodeCreeper(entity, enemy, player, playerEntity, playerPos, terrain, terrainMeshDirty);
             }
             enemy->state = EnemyState::DEAD;
             entity->localTransform.scale = glm::vec3(0.5f);
@@ -785,7 +841,7 @@ private:
 
             if (enemy->fuseTimer >= enemy->fuseTime) {
                 // BOOM
-                explodeCreeper(entity, enemy, player, playerPos, terrain, terrainMeshDirty);
+                explodeCreeper(entity, enemy, player, playerEntity, playerPos, terrain, terrainMeshDirty);
                 enemy->state = EnemyState::DEAD;
             }
         }
@@ -801,7 +857,8 @@ private:
 
         float horizontalSpeed = glm::length(glm::vec2(enemy->velocity.x, enemy->velocity.z));
         bool moving = horizontalSpeed > 0.2f &&
-            (enemy->state == EnemyState::CHASE || enemy->state == EnemyState::ATTACK);
+            (enemy->state == EnemyState::CHASE || enemy->state == EnemyState::ATTACK) &&
+            enemy->isGrounded;
 
         enemy->walkAnimTime += dt * (moving ? (3.5f + horizontalSpeed) : 1.2f);
 
@@ -811,6 +868,11 @@ private:
         float targetPitch = moving
             ? std::sin(enemy->walkAnimTime * 4.2f) * 0.04f
             : 0.0f;
+
+        if (!enemy->isGrounded) {
+            targetRoll = 0.0f;
+            targetPitch = glm::clamp(-enemy->velocity.y * 0.012f, -0.08f, 0.08f);
+        }
 
         float blend = glm::clamp(dt * 10.0f, 0.0f, 1.0f);
         entity->localTransform.rotation.z = glm::mix(entity->localTransform.rotation.z, targetRoll, blend);
@@ -859,32 +921,43 @@ private:
         }
     }
 
-    void dealDamageToPlayer(PlayerComponent* player, float damage) {
-        if (player->timeSinceDamage < player->damageRecoveryTime) return;
+    void dealDamageToPlayer(PlayerComponent* player, float damage, bool bypassRecovery = false) {
+        if (!bypassRecovery && player->timeSinceDamage < player->damageRecoveryTime) return;
         player->timeSinceDamage = 0.0f;
         player->damageFlashTimer = 0.3f;  // Red flash for 0.3s
         player->health -= damage;
         if (player->health <= 0.0f) {
             player->health    = 0.0f;
+            bool wasAlive = player->isAlive;
             player->isAlive   = false;
             player->gameState = GameState::LOSE;
-            our::AudioSystem::playSound("assets/sounds/Death.wav");
+            if (wasAlive) {
+                our::AudioSystem::playSound("assets/sounds/Death.wav");
+            }
         }
     }
 
     // ── Creeper explosion with block destruction ──────────────
     void explodeCreeper(Entity* entity, EnemyComponent* enemy,
-                        PlayerComponent* player, glm::vec3 playerPos,
+                        PlayerComponent* player, Entity* playerEntity, glm::vec3 playerPos,
                         voxel::World* terrain, bool& terrainMeshDirty)
     {
-        glm::vec3 center = entity->localTransform.position;
-        float dist = glm::distance(center, playerPos);
+        glm::vec3 center = entity->localTransform.position + enemy->colliderCenter;
+        glm::vec3 playerCenter = playerPos;
+        if (playerEntity) {
+            if (auto* collider = playerEntity->getComponent<AABBColliderComponent>()) {
+                playerCenter = playerEntity->localTransform.position + collider->center;
+            }
+        }
+
+        float dist = glm::distance(center, playerCenter);
 
         // Damage player
         if (dist <= enemy->explodeRange) {
-            float ratio  = 1.0f - (dist / enemy->explodeRange);
-            float damage = enemy->explodeDamage * ratio;
-            dealDamageToPlayer(player, damage);
+            float falloff  = 1.0f - glm::clamp(dist / enemy->explodeRange, 0.0f, 1.0f);
+            float damageScale = falloff * falloff;
+            float damage = enemy->explodeDamage * damageScale;
+            dealDamageToPlayer(player, damage, true);
         }
 
         // Destroy blocks in a sphere

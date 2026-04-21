@@ -2,6 +2,7 @@
 #include "../mesh/mesh-utils.hpp"
 #include "../texture/texture-utils.hpp"
 #include "../material/material.hpp"
+#include "../components/enemy-component.hpp"
 
 namespace our
 {
@@ -169,7 +170,7 @@ namespace our
                 camera = entity->getComponent<CameraComponent>();
 
             // Find the sun entity for god rays calculation
-            if (!sunEntity && entity->name == "sun")
+            if (!sunEntity && (entity->name == "sun" || entity->name == "Sun"))
                 sunEntity = entity;
 
             // Collect mesh renderer components into render commands
@@ -178,6 +179,7 @@ namespace our
                 RenderCommand command;
                 command.localToWorld = meshRenderer->getOwner()->getLocalToWorldMatrix();
                 command.center = glm::vec3(command.localToWorld * glm::vec4(0, 0, 0, 1));
+                command.owner = meshRenderer->getOwner();
                 command.mesh = meshRenderer->mesh;
                 command.material = meshRenderer->material;
 
@@ -251,6 +253,17 @@ namespace our
                 sh->set(b + "innerCutoff", lights[i].innerCutoff);
                 sh->set(b + "outerCutoff", lights[i].outerCutoff);
             }
+        };
+
+        auto applyEnemyHurtTint = [](const RenderCommand& command, ShaderProgram* sh)
+        {
+            if (!command.owner) return;
+            auto* enemy = command.owner->getComponent<EnemyComponent>();
+            if (!enemy || enemy->hurtFlashTimer <= 0.0f || enemy->hurtFlashDuration <= 0.0f) return;
+
+            float flash = glm::clamp(enemy->hurtFlashTimer / enemy->hurtFlashDuration, 0.0f, 1.0f);
+            glm::vec4 hurtTint(1.0f, 1.0f - 0.75f * flash, 1.0f - 0.75f * flash, 1.0f);
+            sh->set("tint", hurtTint);
         };
 
         // TODO: (Req 9) Modify the following line such that "cameraForward" contains a vector pointing the camera forward direction
@@ -352,6 +365,8 @@ namespace our
                 sh->set("flashColor", activeFlashColor);
             }
 
+            applyEnemyHurtTint(command, sh);
+
             command.mesh->draw();
         }
         // If there is a sky material, draw the sky
@@ -421,6 +436,8 @@ namespace our
                 sh->set("flashStrength", maxFlashStrength);
                 sh->set("flashColor", activeFlashColor);
             }
+
+            applyEnemyHurtTint(command, sh);
 
             command.mesh->draw();
         }

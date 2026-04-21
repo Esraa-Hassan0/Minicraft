@@ -177,6 +177,7 @@ class Playstate : public our::State {
         if (!enemy) return false;
 
         enemy->health -= meleeDamage;
+        enemy->hurtFlashTimer = enemy->hurtFlashDuration;
         enemy->state = our::EnemyState::CHASE;
 
         glm::vec3 knockDir = glm::normalize(glm::vec3(rayDir.x, 0.0f, rayDir.z));
@@ -587,6 +588,15 @@ class Playstate : public our::State {
     void onDraw(double deltaTime) override {
         our::Entity *playerEntity = findPlayerEntity();
         our::PlayerComponent* currentPlayer = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+
+        if (currentPlayer && currentPlayer->health <= 0.0f) {
+            currentPlayer->health = 0.0f;
+            if (currentPlayer->isAlive) {
+                our::AudioSystem::playSound("assets/sounds/Death.wav");
+            }
+            currentPlayer->isAlive = false;
+            currentPlayer->gameState = our::GameState::LOSE;
+        }
 
         if (meleeCooldown > 0.0f) {
             meleeCooldown -= (float)deltaTime;
