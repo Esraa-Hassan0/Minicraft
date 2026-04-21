@@ -53,6 +53,9 @@ uniform float flashStrength; // 0.0 = no flash, 1.0 = full flash
 // Base tint from tinted material (modulates entire output)
 uniform vec4 tint;
 
+// Specular tint from LitMaterial (multiplies specular highlights)
+uniform vec3 specular_tint;
+
 // Output to framebuffer
 out vec4 fragColor;
 
@@ -111,15 +114,18 @@ vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
     // Specular: reflection intensity.
     float specular = pow(max(dot(N, H), 0.0), shininess);
 
-    // Combine lighting terms
-    // Ambient light is typically global/constant and shouldn't attenuate by distance (unlike local lights)
-    // However, if we want point light ambients to be local, they must attenuate.
-    // We compromise: directional light ambient is constant, others attenuate.
-    vec3 ambientC = L.ambient * albedo * attenuation;
-    vec3 diffuseC = L.color * diff * albedo * attenuation;
-    vec3 specularC = L.color * specular * spec * attenuation;
-
-    return ambientC + diffuseC + specularC;
+     // Combine lighting terms
+     // Ambient light is typically global/constant and shouldn't attenuate by distance (unlike local lights)
+     // However, if we want point light ambients to be local, they must attenuate.
+     // We compromise: directional light ambient is constant, others attenuate.
+     vec3 ambientC = L.ambient * albedo * attenuation;
+     vec3 diffuseC = L.color * diff * albedo * attenuation;
+     vec3 specularC = L.color * specular * spec * attenuation;
+     
+     // Apply specular tint from material (to control shininess via JSON)
+     specularC *= specular_tint;
+ 
+     return ambientC + diffuseC + specularC;
 }
 
 // Main fragment shader entry point.
