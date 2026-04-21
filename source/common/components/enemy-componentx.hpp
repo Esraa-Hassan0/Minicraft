@@ -64,7 +64,6 @@ namespace our {
         // Bump-and-jump: detect when stuck against obstacles
         glm::vec3 previousPosition{0.0f};
         float     jumpCooldown     = 0.0f;   // seconds until next jump allowed
-        float     stuckTimer       = 0.0f;   // accumulates while blocked
 
         static std::string getID() { return "EnemyComponent"; }
         void deserialize(const nlohmann::json& data) override {
