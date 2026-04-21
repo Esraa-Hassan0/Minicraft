@@ -1,5 +1,6 @@
 #pragma once
 
+#include "menu-state.hpp"
 #include <application.hpp>
 #include <ecs/world.hpp>
 #include <mesh/mesh-utils.hpp>
@@ -554,8 +555,16 @@ class Playstate : public our::State {
             float invH = 60.0f + 26.0f;
             float heartH = 28.0f;
             float objY = displaySize.y - invH - 16.0f - heartH - 12.0f - 26.0f;
-            char objBuf[64];
-            std::snprintf(objBuf, sizeof(objBuf), "Resources: %d / %d", player->resourcesCollected, player->resourcesRequired);
+            char objBuf[128];
+            int days = timeSystem.getDaysPassed();
+            if (player->currentLevel == 1) {
+                std::snprintf(objBuf, sizeof(objBuf), "Level 1 | Enemies: %d / 2 | Days: %d / 3", player->enemiesKilled, days);
+            } else if (player->currentLevel == 2) {
+                std::snprintf(objBuf, sizeof(objBuf), "Level 2 | Enemies: %d / 5 | Days: %d / 5", player->enemiesKilled, days);
+            } else {
+                std::snprintf(objBuf, sizeof(objBuf), "Level %d | Free Play", player->currentLevel);
+            }
+
             ImVec2 objSize = ImGui::CalcTextSize(objBuf);
             float objX = displaySize.x * 0.5f - objSize.x * 0.5f;
             ImDrawList* fgdl = ImGui::GetForegroundDrawList();
@@ -581,8 +590,7 @@ class Playstate : public our::State {
                 ImVec2(0, 0), ImVec2(displaySize.x, displaySize.y), flashCol);
         }
 
-        // 6. Game Over / Win Overlay
-        enemySystem.drawGameOverlay(&engineWorld);
+        // Game Over / Win overlays have been relocated to the menu system.
     }
 
     void onDraw(double deltaTime) override {
@@ -603,18 +611,32 @@ class Playstate : public our::State {
             if (meleeCooldown < 0.0f) meleeCooldown = 0.0f;
         }
 
+        // ── Level Progression Logic ──
+        if (currentPlayer && currentPlayer->gameState == our::GameState::PLAYING) {
+            int days = timeSystem.getDaysPassed();
+            if (currentPlayer->currentLevel == 1) {
+                if (currentPlayer->enemiesKilled >= 2 && days >= 3) {
+                    currentPlayer->currentLevel = 2; // Level Up
+                }
+            } else if (currentPlayer->currentLevel == 2) {
+                if (currentPlayer->enemiesKilled >= 5 && days >= 5) {
+                    currentPlayer->gameState = our::GameState::WIN; // Win condition
+                }
+            }
+        }
+
         // ── Game-over check: skip game logic when not playing ──
         if (currentPlayer && currentPlayer->gameState != our::GameState::PLAYING) {
-            // Still render but freeze logic
-            if (getApp()->getKeyboard().justPressed(GLFW_KEY_R)) {
-                getApp()->changeState("play"); // Restart
-                return;
+            if (auto* menu = dynamic_cast<Menustate*>(getApp()->getState("menu"))) {
+                if (currentPlayer->gameState == our::GameState::LOSE) {
+                    menu->isGameOver = true;
+                    menu->isWin = false;
+                } else if (currentPlayer->gameState == our::GameState::WIN) {
+                    menu->isGameOver = false;
+                    menu->isWin = true;
+                }
             }
-            if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) {
-                getApp()->changeState("menu");
-                return;
-            }
-            renderer.render(&engineWorld);
+            getApp()->changeState("menu");
             return;
         }
 
@@ -797,11 +819,6 @@ class Playstate : public our::State {
         engineWorld.deleteMarkedEntities();
 
         if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) getApp()->changeState("menu");
-        if (getApp()->getKeyboard().justPressed(GLFW_KEY_R)) {
-            our::PlayerComponent* rPlayer = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
-            if (rPlayer && rPlayer->gameState != our::GameState::PLAYING)
-                getApp()->changeState("play");
-        }
     }
 
     void onKeyEvent(int key, int scancode, int action, int mods) override {

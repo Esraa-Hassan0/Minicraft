@@ -80,6 +80,12 @@ class Menustate: public our::State {
     std::array<MenuButton, 2> buttons;
     std::vector<our::Mesh*> bgTerrainChunkMeshes;
 
+public:
+    // Transition flags from play-state
+    bool isGameOver = false;
+    bool isWin = false;
+private:
+
     our::Material* getMaterialForBlockType(int blockType) {
         switch (blockType) {
             case voxel::STONE: return our::AssetLoader<our::Material>::get("stone");
@@ -549,6 +555,17 @@ class Menustate: public our::State {
         {
             const char* line1 = "Welcome to MiniCraft";
             const char* line2 = "We hope you enjoy playing our game";
+            ImVec4 titleColor = {0.95f, 0.95f, 0.95f, 1.0f};
+
+            if (isGameOver) {
+                line1 = "GAME OVER";
+                line2 = "You have perished. Try again!";
+                titleColor = {1.0f, 0.2f, 0.2f, 1.0f};
+            } else if (isWin) {
+                line1 = "YOU WIN!";
+                line2 = "You have survived and conquered the world!";
+                titleColor = {1.0f, 0.84f, 0.0f, 1.0f};
+            }
 
             float textScale = size.x / 1280.0f;  // scale with window width
             ImGui::SetWindowFontScale(textScale * 1.7f);
@@ -564,7 +581,7 @@ class Menustate: public our::State {
             float x1 = panelX + (panelW - sz1.x) * 0.5f;
             float textShadow = textScale * 3.0f;
             dl->AddText(ImVec2(x1 + textShadow, y1 + textShadow), fadeColor({0.35f, 0.35f, 0.35f, 1.0f}), line1); // shadow
-            dl->AddText(ImVec2(x1,     y1),     fadeColor({0.95f, 0.95f, 0.95f, 1.0f}), line1);
+            dl->AddText(ImVec2(x1,     y1),     fadeColor(titleColor), line1);
 
             // Line 2
             float x2 = panelX + (panelW - sz2.x) * 0.5f;

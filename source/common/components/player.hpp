@@ -24,6 +24,11 @@ namespace our {
         int resourcesCollected = 0;
         int resourcesRequired = 5; // Win condition: collect this many resources
 
+        // Level Progression System
+        int enemiesKilled = 0;
+        int survivedDays = 0;
+        int currentLevel = 1;
+
         int inventoryGrass = 0;
         int inventoryDirt = 0;
         int inventoryWood = 0;

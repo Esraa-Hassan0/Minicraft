@@ -12,6 +12,7 @@ namespace our
     private:
         float currentTime;
         float dayDuration;
+        int totalDaysPassed;
 
         float sunriseStart;
         float sunriseEnd;
@@ -38,6 +39,7 @@ namespace our
         void updateSunScreenPosition(const glm::mat4& viewProjection);
 
         float getTimeOfDay() const { return currentTime; }
+        int getDaysPassed() const { return totalDaysPassed; }
 
         float getSunElevation() const;
 

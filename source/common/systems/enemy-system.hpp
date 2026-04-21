@@ -279,44 +279,46 @@ private:
         glm::vec3 hs = enemy->colliderHalfSize;
         glm::vec3 cc = enemy->colliderCenter;
 
-        // ── X axis: test (pos.x+dx, lastPos.y, lastPos.z) vs lastPos ──
+        // ── Y axis: test (lastPos.x, pos.y+dy, lastPos.z) FIRST ──
+        // This inherently allows vertical velocity to lift the enemy
+        // BEFORE horizontal sweeps hit the ledges.
         {
-            glm::vec3 testPos = {pos.x + dx, lastPos.y, lastPos.z};
-            if (!collidesWithTerrain(testPos, cc, hs, terrain)) {
-                pos.x = testPos.x;
-            } else {
-                enemy->velocity.x = 0;
-                // Snap to block edge (ourCraft approach: no residual penetration)
-                pos.x = snapToBlockEdge(pos.x, dx, cc.x, hs.x);
-            }
-        }
-
-        // ── Z axis: test (pos.x, lastPos.y, pos.z+dz) vs lastPos ──
-        {
-            glm::vec3 testPos = {pos.x, lastPos.y, pos.z + dz};
-            if (!collidesWithTerrain(testPos, cc, hs, terrain)) {
-                pos.z = testPos.z;
-            } else {
-                enemy->velocity.z = 0;
-                pos.z = snapToBlockEdge(pos.z, dz, cc.z, hs.z);
-            }
-        }
-
-        // ── Y axis: test (pos.x, pos.y+dy, pos.z) ──
-        {
-            glm::vec3 testPos = {pos.x, pos.y + dy, pos.z};
+            glm::vec3 testPos = {lastPos.x, pos.y + dy, lastPos.z};
             if (!collidesWithTerrain(testPos, cc, hs, terrain)) {
                 pos.y = testPos.y;
             } else {
                 if (dy < 0) {
                     // Hit floor → snap up, mark grounded
                     enemy->isGrounded = true;
-                    pos.y = snapToBlockEdgeY(pos.y, dy, pos.x, pos.z, cc, hs, terrain);
+                    pos.y = snapToBlockEdgeY(pos.y, dy, lastPos.x, lastPos.z, cc, hs, terrain);
                 } else {
                     // Hit ceiling → stop
-                    pos.y = snapToBlockEdgeY(pos.y, dy, pos.x, pos.z, cc, hs, terrain);
+                    pos.y = snapToBlockEdgeY(pos.y, dy, lastPos.x, lastPos.z, cc, hs, terrain);
                 }
                 enemy->velocity.y = 0;
+            }
+        }
+
+        // ── X axis: test (pos.x+dx, pos.y, lastPos.z) using NEW pos.y ──
+        {
+            glm::vec3 testPos = {pos.x + dx, pos.y, lastPos.z};
+            if (!collidesWithTerrain(testPos, cc, hs, terrain)) {
+                pos.x = testPos.x;
+            } else {
+                enemy->velocity.x = 0;
+                // Snap to block edge
+                pos.x = snapToBlockEdge(pos.x, dx, cc.x, hs.x);
+            }
+        }
+
+        // ── Z axis: test (pos.x, pos.y, pos.z+dz) using NEW pos.y and pos.x ──
+        {
+            glm::vec3 testPos = {pos.x, pos.y, pos.z + dz};
+            if (!collidesWithTerrain(testPos, cc, hs, terrain)) {
+                pos.z = testPos.z;
+            } else {
+                enemy->velocity.z = 0;
+                pos.z = snapToBlockEdge(pos.z, dz, cc.z, hs.z);
             }
         }
     }
@@ -394,31 +396,6 @@ private:
         if (!terrain) return false;
         int bt = terrain->getBlock(x, y, z);
         return bt != 0 && bt != voxel::WATER;
-    }
-
-    bool tryStepUpObstacle(voxel::World* terrain, glm::vec3& pos, EnemyComponent* enemy, const glm::vec3& moveDir)
-    {
-        if (!terrain) return false;
-
-        glm::vec3 ahead = pos + moveDir * 0.65f;
-        int bx = (int)std::floor(ahead.x);
-        int bz = (int)std::floor(ahead.z);
-        int footY = (int)std::floor(pos.y + 0.05f);
-
-        bool wallAhead = isSolidAt(terrain, bx, footY, bz);
-        bool clearAbove = !isSolidAt(terrain, bx, footY + 1, bz) && !isSolidAt(terrain, bx, footY + 2, bz);
-        if (!wallAhead || !clearAbove) return false;
-
-        // Try stepping up by one block instead of hard jumping to avoid jitter on level transitions.
-        glm::vec3 candidate = pos + glm::vec3(moveDir.x * 0.25f, 1.02f, moveDir.z * 0.25f);
-        if (collidesWithTerrain(candidate, enemy->colliderCenter, enemy->colliderHalfSize, terrain)) return false;
-
-        pos = candidate;
-        enemy->velocity.y = 0.0f;
-        enemy->isGrounded = true;
-        enemy->jumpCooldown = 0.28f;
-        enemy->stuckTimer = 0.0f;
-        return true;
     }
 
     // ── Spawning ──────────────────────────────────────────────
@@ -611,6 +588,12 @@ private:
         enemy->timeSinceAttack += dt;
         enemy->timeSinceShot   += dt;
 
+        if (enemy->health <= 0.0f && enemy->state != EnemyState::DEAD) {
+            enemy->state = EnemyState::DEAD;
+            player->enemiesKilled++;
+            // We let the specific tick still run once so it can set scale, etc.
+        }
+
         // ── State machine ────────────────────────────────────
         switch (enemy->type) {
         case EnemyType::ZOMBIE:
@@ -635,25 +618,23 @@ private:
             float movLen = glm::length(moveDir);
             if (movLen > 0.65f) {
                 moveDir /= movLen;
-                if (!tryStepUpObstacle(terrain, pos, enemy, moveDir)) {
-                    glm::vec3 ahead = pos + moveDir * 0.7f;
-                    int bx = (int)std::floor(ahead.x);
-                    int bz = (int)std::floor(ahead.z);
-                    int footY = (int)std::floor(pos.y + 0.05f);
+                glm::vec3 ahead = pos + moveDir * 0.7f;
+                int bx = (int)std::floor(ahead.x);
+                int bz = (int)std::floor(ahead.z);
+                int footY = (int)std::floor(pos.y + 0.05f);
 
-                    int blockAhead = terrain->getBlock(bx, footY, bz);
-                    int blockAbove = terrain->getBlock(bx, footY + 1, bz);
-                    int blockAboveAbove = terrain->getBlock(bx, footY + 2, bz);
+                int blockAhead = terrain->getBlock(bx, footY, bz);
+                int blockAbove = terrain->getBlock(bx, footY + 1, bz);
+                int blockAboveAbove = terrain->getBlock(bx, footY + 2, bz);
 
-                    bool wallAhead = (blockAhead != voxel::AIR && blockAhead != voxel::WATER);
-                    bool clearAbove = (blockAbove == voxel::AIR || blockAbove == voxel::WATER);
-                    bool clearAboveAbove = (blockAboveAbove == voxel::AIR || blockAboveAbove == voxel::WATER);
+                bool wallAhead = (blockAhead != voxel::AIR && blockAhead != voxel::WATER);
+                bool clearAbove = (blockAbove == voxel::AIR || blockAbove == voxel::WATER);
+                bool clearAboveAbove = (blockAboveAbove == voxel::AIR || blockAboveAbove == voxel::WATER);
 
-                    if (wallAhead && clearAbove && clearAboveAbove) {
-                        enemy->velocity.y = std::max(enemy->velocity.y, 5.9f);
-                        enemy->jumpCooldown = 0.82f;
-                        enemy->stuckTimer = 0.0f;
-                    }
+                if (wallAhead && clearAbove && clearAboveAbove) {
+                    enemy->velocity.y = std::max(enemy->velocity.y, 5.9f);
+                    enemy->jumpCooldown = 0.82f;
+                    enemy->stuckTimer = 0.0f;
                 }
             }
         }
@@ -955,7 +936,7 @@ private:
         // Damage player
         if (dist <= enemy->explodeRange) {
             float falloff  = 1.0f - glm::clamp(dist / enemy->explodeRange, 0.0f, 1.0f);
-            float damageScale = falloff * falloff;
+            float damageScale = falloff; // linear scaling depending on distance
             float damage = enemy->explodeDamage * damageScale;
             dealDamageToPlayer(player, damage, true);
         }

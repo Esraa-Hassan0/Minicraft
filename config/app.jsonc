@@ -267,24 +267,26 @@
                     "tint": [1.0, 1.0, 0.8, 1.0]
                 },
                 "steve-skin": {
-                    "type": "tinted",
-                    "shader": "tinted",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": false },
                         "depthMask": false
                     },
-                    "tint": [0.96, 0.80, 0.66, 1.0]
+                    "tint": [0.96, 0.80, 0.66, 1.0],
+                    "shininess": 10.0
                 },
                 "steve-shirt": {
-                    "type": "tinted",
-                    "shader": "tinted",
+                    "type": "lit",
+                    "shader": "lit",
                     "pipelineState": {
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": false },
                         "depthMask": false
                     },
-                    "tint": [0.17, 0.52, 0.92, 1.0]
+                    "tint": [0.17, 0.52, 0.92, 1.0],
+                    "shininess": 10.0
                 },
                 "wireframe": {
                     "type": "tinted",

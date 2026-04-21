@@ -8,6 +8,7 @@ namespace our
     {
         this->dayDuration = dayDuration;
         this->currentTime = 0.25f;
+        this->totalDaysPassed = 0;
 
         this->sunriseStart = 0.2f;
         this->sunriseEnd = 0.3f;
@@ -48,8 +49,10 @@ namespace our
     void TimeSystem::update(World *world, float deltaTime)
     {
         currentTime += deltaTime / dayDuration;
-        if (currentTime >= 1.0f)
+        if (currentTime >= 1.0f) {
             currentTime -= 1.0f;
+            totalDaysPassed++;
+        }
 
         float elevation = getSunElevation();
         updateSunPosition(currentTime);

@@ -114,6 +114,17 @@ namespace our
             }
         }
 
+        // Retrieves a state by name
+        State* getState(std::string name)
+        {
+            auto it = states.find(name);
+            if (it != states.end())
+            {
+                return it->second;
+            }
+            return nullptr;
+        }
+
         // Closes the Application
         void close()
         {
