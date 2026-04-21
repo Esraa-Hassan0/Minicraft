@@ -9,6 +9,7 @@
 #include "player.hpp"
 #include "aabb-collider.hpp"
 #include "light.hpp"
+#include "enemy-component.hpp"
 
 namespace our
 {
@@ -48,6 +49,10 @@ namespace our
         else if (type == LightComponent::getID())
         {
             component = entity->addComponent<LightComponent>();
+        }
+        else if (type == EnemyComponent::getID())
+        {
+            component = entity->addComponent<EnemyComponent>();
         }
         if (component)
             component->deserialize(data);

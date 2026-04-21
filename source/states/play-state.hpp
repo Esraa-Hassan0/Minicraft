@@ -11,6 +11,7 @@
 #include <systems/light.hpp>
 #include <systems/time-system.hpp>
 #include <systems/block-interaction.hpp>
+#include <systems/enemy-system.hpp>
 #include <asset-loader.hpp>
 #include <texture/texture2d.hpp>
 #include <voxel/world.hpp>
@@ -45,7 +46,9 @@ class Playstate : public our::State {
     our::Entity* highlightEntity = nullptr;      // Semi-transparent fill
     our::Entity* highlightEdgesEntity = nullptr; // Clean square borders
     our::Mesh* highlightEdgesMesh = nullptr;     // Line-based mesh for borders
+    our::Entity* portalEntity = nullptr;         // Win-condition portal
     BlockInteractionSystem blockInteraction;
+    our::EnemySystem enemySystem;
 
     // Chunk Streaming State
     int chunkLoadRadius = 2;
@@ -286,6 +289,7 @@ class Playstate : public our::State {
         highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f); // Slightly larger than the fill to avoid z-fighting
 
         blockInteraction.initialize(&engineWorld);
+        enemySystem.initialize();
         our::AudioSystem::startLoopingSound("water_ambient", "assets/sounds/water_flowing.wav");
         our::AudioSystem::setLoopingSoundVolume("water_ambient", 0.0f);
 
@@ -300,6 +304,26 @@ class Playstate : public our::State {
                 }
             }
         }
+
+        // Spawn portal entity for win condition
+        {
+            glm::vec3 portalPos(30.0f, 1.0f, 30.0f);
+            // Find ground at portal location
+            for (int y = terrainWorld.height - 1; y >= 0; --y) {
+                if (terrainWorld.getBlock(30, y, 30) != 0 && terrainWorld.getBlock(30, y, 30) != voxel::WATER) {
+                    portalPos.y = (float)(y + 1) + 0.5f;
+                    break;
+                }
+            }
+            portalEntity = engineWorld.add();
+            portalEntity->name = "portal";
+            portalEntity->localTransform.position = portalPos;
+            portalEntity->localTransform.scale = glm::vec3(1.0f);
+            auto* portalMR = portalEntity->addComponent<our::MeshRendererComponent>();
+            portalMR->mesh = our::AssetLoader<our::Mesh>::get("cube");
+            portalMR->material = our::AssetLoader<our::Material>::get("sun-material");
+        }
+
         if (terrainMeshDirty) rebuildMesh();
     }
 
@@ -379,25 +403,115 @@ class Playstate : public our::State {
             }
         }
 
-        // 2. Draw Crosshair
+        // 3. Draw Crosshair
         ImDrawList* drawList = ImGui::GetForegroundDrawList();
         ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
         drawList->AddLine(ImVec2(center.x - 8, center.y), ImVec2(center.x + 8, center.y), IM_COL32(255, 255, 255, 220), 2.0f);
         drawList->AddLine(ImVec2(center.x, center.y - 8), ImVec2(center.x, center.y + 8), IM_COL32(255, 255, 255, 220), 2.0f);
+
+        // 4. Objective Progress
+        if (player) {
+            float invH = 60.0f + 26.0f;
+            float heartH = 28.0f;
+            float objY = displaySize.y - invH - 16.0f - heartH - 12.0f - 26.0f;
+            char objBuf[64];
+            std::snprintf(objBuf, sizeof(objBuf), "Resources: %d / %d", player->resourcesCollected, player->resourcesRequired);
+            ImVec2 objSize = ImGui::CalcTextSize(objBuf);
+            float objX = displaySize.x * 0.5f - objSize.x * 0.5f;
+            ImDrawList* fgdl = ImGui::GetForegroundDrawList();
+            fgdl->AddText(ImVec2(objX + 1, objY + 1), IM_COL32(0,0,0,180), objBuf);
+            fgdl->AddText(ImVec2(objX, objY), IM_COL32(255, 220, 80, 255), objBuf);
+
+            // Food count indicator
+            if (player->foodCount > 0) {
+                char foodBuf[32];
+                std::snprintf(foodBuf, sizeof(foodBuf), "Food: %d (F to heal)", player->foodCount);
+                ImVec2 foodSize = ImGui::CalcTextSize(foodBuf);
+                float foodX = displaySize.x * 0.5f - foodSize.x * 0.5f;
+                fgdl->AddText(ImVec2(foodX + 1, objY - 22.0f + 1), IM_COL32(0,0,0,180), foodBuf);
+                fgdl->AddText(ImVec2(foodX, objY - 22.0f), IM_COL32(120, 255, 120, 255), foodBuf);
+            }
+        }
+
+        // 5. Damage Flash Overlay
+        if (player && player->damageFlashTimer > 0) {
+            float alpha = glm::clamp(player->damageFlashTimer / 0.3f, 0.0f, 1.0f) * 0.35f;
+            ImU32 flashCol = IM_COL32(255, 0, 0, (int)(alpha * 255));
+            ImGui::GetForegroundDrawList()->AddRectFilled(
+                ImVec2(0, 0), ImVec2(displaySize.x, displaySize.y), flashCol);
+        }
+
+        // 6. Game Over / Win Overlay
+        enemySystem.drawGameOverlay(&engineWorld);
     }
 
     void onDraw(double deltaTime) override {
+        our::Entity *playerEntity = findPlayerEntity();
+        our::PlayerComponent* currentPlayer = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+
+        // ── Game-over check: skip game logic when not playing ──
+        if (currentPlayer && currentPlayer->gameState != our::GameState::PLAYING) {
+            // Still render but freeze logic
+            if (getApp()->getKeyboard().justPressed(GLFW_KEY_R)) {
+                getApp()->changeState("play"); // Restart
+                return;
+            }
+            if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) {
+                getApp()->changeState("menu");
+                return;
+            }
+            renderer.render(&engineWorld);
+            return;
+        }
+
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
-        
-        our::Entity *playerEntity = findPlayerEntity();
-        if (playerEntity) streamChunksAroundPlayer(playerEntity->localTransform.position);
+
+        if (playerEntity) {
+            if (currentPlayer) {
+                currentPlayer->timeSinceDamage += (float)deltaTime;
+                // Damage flash countdown
+                if (currentPlayer->damageFlashTimer > 0)
+                    currentPlayer->damageFlashTimer -= (float)deltaTime;
+                // Heal cooldown
+                if (currentPlayer->healCooldown > 0)
+                    currentPlayer->healCooldown -= (float)deltaTime;
+            }
+            streamChunksAroundPlayer(playerEntity->localTransform.position);
+        }
 
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
         timeSystem.update(&engineWorld, (float)deltaTime);
 
         blockInteraction.update((float)deltaTime, &engineWorld);
+        if (playerEntity) {
+            enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
+        }
+
+        // ── Portal win condition ──
+        if (playerEntity && currentPlayer && portalEntity) {
+            float portalDist = glm::distance(playerEntity->localTransform.position, portalEntity->localTransform.position);
+            if (portalDist < 2.0f && currentPlayer->resourcesCollected >= currentPlayer->resourcesRequired) {
+                currentPlayer->gameState = our::GameState::WIN;
+                currentPlayer->hasReachedPortal = true;
+            }
+            // Portal bobbing animation
+            static float portalTime = 0.0f;
+            portalTime += (float)deltaTime;
+            portalEntity->localTransform.rotation.y += (float)deltaTime * 2.0f;
+            portalEntity->localTransform.position.y += std::sin(portalTime * 3.0f) * 0.01f;
+        }
+
+        // ── Food healing (F key) ──
+        if (currentPlayer && getApp()->getKeyboard().justPressed(GLFW_KEY_F)) {
+            if (currentPlayer->foodCount > 0 && currentPlayer->healCooldown <= 0 &&
+                currentPlayer->health < currentPlayer->maxHealth) {
+                currentPlayer->foodCount--;
+                currentPlayer->health = std::min(currentPlayer->health + currentPlayer->healPerFood, currentPlayer->maxHealth);
+                currentPlayer->healCooldown = 1.0f;
+            }
+        }
 
         // Handle water damage
         our::PlayerComponent* player = nullptr;
@@ -487,7 +601,13 @@ class Playstate : public our::State {
                         // The block was completely broken
                         our::AudioSystem::playSound("assets/sounds/Hit.wav");
 
-                        if (player) registerCollectedBlock(player, type);
+                        if (player) {
+                            registerCollectedBlock(player, type);
+                            // LEAF blocks give food
+                            if (type == voxel::LEAF) {
+                                player->foodCount++;
+                            }
+                        }
                     } else {
                         // The block was hit but not broken
                         if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
@@ -520,6 +640,11 @@ class Playstate : public our::State {
         engineWorld.deleteMarkedEntities();
 
         if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) getApp()->changeState("menu");
+        if (getApp()->getKeyboard().justPressed(GLFW_KEY_R)) {
+            our::PlayerComponent* rPlayer = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+            if (rPlayer && rPlayer->gameState != our::GameState::PLAYING)
+                getApp()->changeState("play");
+        }
     }
 
     void onKeyEvent(int key, int scancode, int action, int mods) override {
@@ -539,6 +664,7 @@ class Playstate : public our::State {
 
     void onDestroy() override {
         our::AudioSystem::stopLoopingSound("water_ambient");
+        enemySystem.destroy();
         clearAllChunkRenderGroups();
         engineWorld.deleteMarkedEntities();
         renderer.destroy();

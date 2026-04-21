@@ -57,6 +57,17 @@ namespace our {
 
         float waterAmbientTimer = 0.0f;
 
+        // Damage flash (visual feedback)
+        float damageFlashTimer = 0.0f;
+
+        // Food healing system
+        int   foodCount     = 0;
+        float healPerFood   = 20.0f;
+        float healCooldown  = 0.0f;
+
+        // Portal win condition
+        bool  hasReachedPortal = false;
+
         // Game outcome
         GameState gameState = GameState::PLAYING;
 

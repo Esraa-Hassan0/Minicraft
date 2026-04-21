@@ -11,8 +11,8 @@
     "scene": {
         "terrain": {
             "height": 100,
-            "waterLevel": 10,
-            "stoneLevel": 2
+            "waterLevel": 5,
+            "stoneLevel": 4
         },
         "renderer": {
             "sky": "assets/textures/sky.png",
@@ -45,7 +45,10 @@
                 "clay": "assets/textures/clay.png",
                 "glass": "assets/textures/glass.png",
                 "monkey": "assets/textures/monkey.png",
-                "hearts": "assets/textures/hearts.png"
+                "hearts": "assets/textures/hearts.png",
+                "enemy-zombie-tex":   "assets/textures/zombie.png",
+                "enemy-skeleton-tex": "assets/textures/skeleton.png",
+                "enemy-creeper-tex":  "assets/textures/creeper.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
@@ -290,6 +293,39 @@
                     },
                     "transparent": true,
                     "tint": [0.0, 0.0, 0.0, 0.2]
+                },
+                "enemy-zombie": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "enemy-zombie-tex",
+                    "sampler": "pixelated"
+                },
+                "enemy-skeleton": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "enemy-skeleton-tex",
+                    "sampler": "pixelated"
+                },
+                "enemy-creeper": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "tint": [1, 1, 1, 1],
+                    "texture": "enemy-creeper-tex",
+                    "sampler": "pixelated"
                 }
             }
         },
@@ -343,19 +379,7 @@
                 "rotation": [-45, 0, 0],
                 "components": [
                     { "type": "Camera" },
-                    { 
-                        "type": "PlayerComponent", 
-                        "maxHealth": 100,
-                        "health": 100,
-                        "waterDamageInterval": 2.0,
-                        "waterDamageAmount": 10,
-                        "waterSpeedMultiplier": 0.6,
-                        "waterGravityMultiplier": 0.3,
-                        "swimUpSpeed": 4.0,
-                        "swimDownSpeed": 3.0,
-                        "speed": 5.0,
-                        "jumpForce": 8.0
-                    },
+                    { "type": "PlayerComponent" },
                     {
                         "type": "AABBCollider",
                         "halfSize": [0.3, 0.9, 0.3],

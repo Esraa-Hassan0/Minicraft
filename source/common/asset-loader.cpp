@@ -6,6 +6,7 @@
 #include "texture/sampler.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/mesh-utils.hpp"
+#include "mesh/enemy-mesh-builder.hpp"
 #include "material/material.hpp"
 #include "deserialize-utils.hpp"
 
@@ -40,6 +41,16 @@ namespace our {
                 assets[name] = texture_utils::loadImage(path);
             }
         }
+
+        auto registerTextureIfMissing = [&](const std::string& name, const std::string& path){
+            if(assets.find(name) == assets.end()){
+                assets[name] = texture_utils::loadImage(path);
+            }
+        };
+
+        registerTextureIfMissing("zombie", "assets/textures/zombie.png");
+        registerTextureIfMissing("skeleton", "assets/textures/skeleton.png");
+        registerTextureIfMissing("creeper", "assets/textures/creeper.png");
     };
 
     // This will load all the samplers defined in "data"
@@ -71,6 +82,10 @@ namespace our {
                 assets[name] = mesh_utils::loadOBJ(path);
             }
         }
+
+        if(assets.find("zombie") == assets.end()) assets["zombie"] = enemy_mesh::buildZombieMesh();
+        if(assets.find("skeleton") == assets.end()) assets["skeleton"] = enemy_mesh::buildSkeletonMesh();
+        if(assets.find("creeper") == assets.end()) assets["creeper"] = enemy_mesh::buildCreeperMesh();
     };
 
     // This will load all the materials defined in "data"
