@@ -72,6 +72,9 @@ void LitMaterial::setup() const {
         TexturedMaterial::setup();
         if(shader) {
             shader->set("shininess", shininess);
+            // Send the specular tint vector to the shader
+            shader->set("specular_tint", specular);
+            
             if(texture && sampler) {
                 glActiveTexture(GL_TEXTURE0);
                 texture->bind();
@@ -130,6 +133,13 @@ void LitMaterial::setup() const {
         // Load specular map and sampler from AssetLoader by name
         specularMap = AssetLoader<Texture2D>::get(data.value("specularMap", ""));
         specularSampler = AssetLoader<Sampler>::get(data.value("specularSampler", ""));
+
+        // Read the specular array from the JSON
+        if (data.contains("specular") && data["specular"].is_array() && data["specular"].size() == 3) {
+            specular = glm::vec3(data["specular"][0], data["specular"][1], data["specular"][2]);
+        } else {
+            specular = glm::vec3(1.0f); // Default to fully reflective
+        }
     }
 
 }

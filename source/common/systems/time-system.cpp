@@ -27,6 +27,7 @@ namespace our
 
         for (auto entity : world->getEntities())
         {
+            if (!entity) continue;
             if (entity->name == "sun")
             {
                 sunEntity = entity;
@@ -122,7 +123,9 @@ namespace our
         if (sunLight)
         {
             sunLight->color = sunColor;
-            sunLight->ambient = sunColor * sunIntensity * 0.5f;
+            // Ensure a baseline ambient light even at night
+            float minAmbient = 0.6f; // Increased significantly for better night visibility
+            sunLight->ambient = glm::max(sunColor * sunIntensity * 0.5f, glm::vec3(minAmbient));
             sunLight->enabled = sunIntensity > 0.2f;
         }
 
@@ -139,6 +142,9 @@ namespace our
         if (nightLight)
         {
             nightLight->enabled = !isDay;
+            if (!isDay) {
+                // nightLight properties are mainly from config, but we can ensure they are active
+            }
         }
     }
 }

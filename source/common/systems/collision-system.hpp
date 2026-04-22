@@ -3,6 +3,7 @@
 #include "../ecs/world.hpp"
 #include "../components/aabb-collider.hpp"
 #include "../components/player.hpp"
+#include "../components/npc-movement.hpp"
 #include "../voxel/world.hpp"
 #include "../audio/audio.hpp"
 #include <glm/glm.hpp>
@@ -19,13 +20,33 @@ namespace our {
 
             // Update velocities (apply gravity)
             for (auto entity : world->getEntities()) {
+                if (!entity) continue;
                 AABBColliderComponent* collider = entity->getComponent<AABBColliderComponent>();
+                
+                // Get physics state from either Player or NPC component
                 PlayerComponent* player = entity->getComponent<PlayerComponent>();
+                NPCMovementComponent* npc = entity->getComponent<NPCMovementComponent>();
+                
+                glm::vec3* velocity = nullptr;
+                bool* isUnderwater = nullptr;
+                float gravityAcceleration = 9.8f;
+                float waterGravityMultiplier = 0.5f;
 
-                if (collider && player) {
-                    // Detect if player will be underwater this frame
+                if (player) {
+                    velocity = &player->velocity;
+                    isUnderwater = &player->isUnderwater;
+                    gravityAcceleration = player->gravityAcceleration;
+                    waterGravityMultiplier = player->waterGravityMultiplier;
+                } else if (npc) {
+                    velocity = &npc->velocity;
+                    // For NPCs we don't have isUnderwater yet, but we can add it if needed
+                    // For now, let's just use a default or dummy
+                }
+
+                if (collider && velocity) {
+                    // Detect if entity will be underwater this frame
                     if (terrain) {
-                        glm::vec3 checkPos = entity->localTransform.position + player->velocity * deltaTime;
+                        glm::vec3 checkPos = entity->localTransform.position + (*velocity) * deltaTime;
                         glm::vec3 colliderMin = collider->getMinCorner(checkPos);
                         glm::vec3 colliderMax = collider->getMaxCorner(checkPos);
                         
@@ -39,50 +60,68 @@ namespace our {
                                 }
                             }
                         }
-                        if (inWater && !player->isUnderwater) {
-                            our::AudioSystem::playSound("assets/sounds/Splash.wav");
+                        if (isUnderwater) {
+                            if (inWater && !(*isUnderwater) && player) {
+                                our::AudioSystem::playSound("assets/sounds/Splash.wav");
+                            }
+                            (*isUnderwater) = inWater;
                         }
-                        player->isUnderwater = inWater;
                     }
 
                     // Apply gravity (reduced when underwater)
-                    float gravityMult = player->isUnderwater ? player->waterGravityMultiplier : 1.0f;
-                    player->velocity.y -= player->gravityAcceleration * gravityMult * deltaTime;
+                    float gravityMult = (isUnderwater && *isUnderwater) ? waterGravityMultiplier : 1.0f;
+                    velocity->y -= gravityAcceleration * gravityMult * deltaTime;
                     
                     // Cap falling speed to prevent instability
                     const float maxFallSpeed = 50.0f;
-                    if (player->velocity.y < -maxFallSpeed) {
-                        player->velocity.y = -maxFallSpeed;
+                    if (velocity->y < -maxFallSpeed) {
+                        velocity->y = -maxFallSpeed;
                     }
                 }
             }
 
             // Move entities and handle collisions
             for (auto entity : world->getEntities()) {
+                if (!entity) continue;
                 AABBColliderComponent* collider = entity->getComponent<AABBColliderComponent>();
                 
                 if (collider && collider->isPhysical) {
                     PlayerComponent* player = entity->getComponent<PlayerComponent>();
+                    NPCMovementComponent* npc = entity->getComponent<NPCMovementComponent>();
                     
+                    glm::vec3* velocity = nullptr;
+                    bool* isGrounded = nullptr;
+                    if (player) {
+                        velocity = &player->velocity;
+                        isGrounded = &player->isGrounded;
+                    }
+                    // NPCs manage their own grounding in npcMovementSystem - skip isGrounded here
+                    // else if (npc) {
+                    //     velocity = &npc->velocity;
+                    //     isGrounded = &npc->isGrounded;
+                    // }
+
                     // Update position based on velocity
                     glm::vec3 newPosition = entity->localTransform.position;
-                    if (player) {
-                        newPosition += player->velocity * deltaTime;
+                    if (velocity) {
+                        newPosition += (*velocity) * deltaTime;
                     }
 
                     // Check collisions with other entities
                     bool collidedVertically = false;
 
                     if (terrain) {
+                        // Use a small epsilon to avoid being blocked by the block we are standing on or touching
+                        const float epsilon = 0.001f;
                         glm::vec3 minCorner = collider->getMinCorner(newPosition);
                         glm::vec3 maxCorner = collider->getMaxCorner(newPosition);
 
-                        int minX = static_cast<int>(std::floor(minCorner.x));
-                        int maxX = static_cast<int>(std::floor(maxCorner.x));
-                        int minY = static_cast<int>(std::floor(minCorner.y));
-                        int maxY = static_cast<int>(std::floor(maxCorner.y));
-                        int minZ = static_cast<int>(std::floor(minCorner.z));
-                        int maxZ = static_cast<int>(std::floor(maxCorner.z));
+                        int minX = static_cast<int>(std::floor(minCorner.x + epsilon));
+                        int maxX = static_cast<int>(std::floor(maxCorner.x - epsilon));
+                        int minY = static_cast<int>(std::floor(minCorner.y + epsilon));
+                        int maxY = static_cast<int>(std::floor(maxCorner.y - epsilon));
+                        int minZ = static_cast<int>(std::floor(minCorner.z + epsilon));
+                        int maxZ = static_cast<int>(std::floor(maxCorner.z - epsilon));
 
                         for (int x = minX; x <= maxX; ++x) {
                             for (int y = minY; y <= maxY; ++y) {
@@ -101,19 +140,19 @@ namespace our {
                                         
                                         if (glm::abs(penetration.y) == minPenetrationType && penetration.y != 0) {
                                             newPosition.y += penetration.y;
-                                            if (player && penetration.y > 0) {
-                                                player->velocity.y = 0;
-                                                player->isGrounded = true;
+                                            if (velocity && penetration.y > 0) {
+                                                velocity->y = 0;
+                                                if (isGrounded) *isGrounded = true;
                                                 collidedVertically = true;
-                                            } else if (player && penetration.y < 0) {
-                                                player->velocity.y = 0;
+                                            } else if (velocity && penetration.y < 0) {
+                                                velocity->y = 0;
                                             }
                                         } else if (glm::abs(penetration.x) == minPenetrationType && penetration.x != 0) {
                                             newPosition.x += penetration.x;
-                                            if (player) player->velocity.x = 0;
+                                            if (velocity) velocity->x = 0;
                                         } else if (glm::abs(penetration.z) == minPenetrationType && penetration.z != 0) {
                                             newPosition.z += penetration.z;
-                                            if (player) player->velocity.z = 0;
+                                            if (velocity) velocity->z = 0;
                                         }
                                     }
                                 }
@@ -122,7 +161,7 @@ namespace our {
                     }
 
                     for (auto otherEntity : world->getEntities()) {
-                        if (otherEntity == entity) continue;
+                        if (!otherEntity || otherEntity == entity) continue;
 
                         AABBColliderComponent* otherCollider = otherEntity->getComponent<AABBColliderComponent>();
                         if (!otherCollider) continue;
@@ -148,23 +187,23 @@ namespace our {
                                 if (glm::abs(penetration.y) == minPenetrationType && penetration.y != 0) {
                                     // Vertical collision
                                     newPosition.y += penetration.y;
-                                    if (player && penetration.y > 0) {
+                                    if (velocity && penetration.y > 0) {
                                         // Landing on something
-                                        player->velocity.y = 0;
-                                        player->isGrounded = true;
+                                        velocity->y = 0;
+                                        if (isGrounded) *isGrounded = true;
                                         collidedVertically = true;
-                                    } else if (player && penetration.y < 0) {
+                                    } else if (velocity && penetration.y < 0) {
                                         // Hit head
-                                        player->velocity.y = 0;
+                                        velocity->y = 0;
                                     }
                                 } else if (glm::abs(penetration.x) == minPenetrationType && penetration.x != 0) {
                                     // Horizontal collision (X)
                                     newPosition.x += penetration.x;
-                                    if (player) player->velocity.x = 0;
+                                    if (velocity) velocity->x = 0;
                                 } else if (glm::abs(penetration.z) == minPenetrationType && penetration.z != 0) {
                                     // Horizontal collision (Z)
                                     newPosition.z += penetration.z;
-                                    if (player) player->velocity.z = 0;
+                                    if (velocity) velocity->z = 0;
                                 }
                             }
                         }
@@ -174,12 +213,12 @@ namespace our {
                     entity->localTransform.position = newPosition;
 
                     // Handle grounding (check if entity is on the ground)
-                    if (player) {
+                    if (isGrounded) {
                         // If we didn't collide vertically this frame, we're falling
-                        if (!collidedVertically && player->isGrounded) {
+                        if (!collidedVertically && (*isGrounded)) {
                             // Do one more check below to see if we're still on the ground
                             glm::vec3 checkPosition = entity->localTransform.position;
-                            checkPosition.y -= 0.01f; // Small offset below
+                            checkPosition.y -= 0.1f;  // Use larger probe to ensure we detect ground
                             
                             bool stillGrounded = false;
                             
@@ -187,14 +226,14 @@ namespace our {
                             if (terrain) {
                                 glm::vec3 minCorner = collider->getMinCorner(checkPosition);
                                 glm::vec3 maxCorner = collider->getMaxCorner(checkPosition);
-                                int minX = static_cast<int>(std::floor(minCorner.x));
-                                int maxX = static_cast<int>(std::floor(maxCorner.x));
-                                int minY = static_cast<int>(std::floor(minCorner.y));
-                                int maxY = static_cast<int>(std::floor(maxCorner.y));
-                                int minZ = static_cast<int>(std::floor(minCorner.z));
-                                int maxZ = static_cast<int>(std::floor(maxCorner.z));
+                                int minX = static_cast<int>(std::floor(minCorner.x + 0.01f));
+                                int maxX = static_cast<int>(std::floor(maxCorner.x - 0.01f));
+                                int minY = static_cast<int>(std::floor(minCorner.y + 0.01f));
+                                int maxY = static_cast<int>(std::floor(maxCorner.y - 0.01f));
+                                int minZ = static_cast<int>(std::floor(minCorner.z + 0.01f));
+                                int maxZ = static_cast<int>(std::floor(maxCorner.z - 0.01f));
 
-                            for (int x = minX; x <= maxX; ++x) {
+                                for (int x = minX; x <= maxX; ++x) {
                                      for (int y = minY; y <= maxY; ++y) {
                                          for (int z = minZ; z <= maxZ; ++z) {
                                              int blockType = terrain->getBlock(x, y, z);
@@ -209,21 +248,21 @@ namespace our {
                                 }
                             }
 
-                            for (auto otherEntity : world->getEntities()) {
-                                if (otherEntity == entity) continue;
-                                
-                                AABBColliderComponent* otherCollider = otherEntity->getComponent<AABBColliderComponent>();
-                                if (!otherCollider || otherCollider->isTrigger) continue;
+                            if (!stillGrounded) {
+                                for (auto otherEntity : world->getEntities()) {
+                                    if (!otherEntity || otherEntity == entity) continue;
+                                    
+                                    AABBColliderComponent* otherCollider = otherEntity->getComponent<AABBColliderComponent>();
+                                    if (!otherCollider || otherCollider->isTrigger) continue;
 
-                                if (collider->overlaps(checkPosition, *otherCollider, otherEntity->localTransform.position)) {
-                                    stillGrounded = true;
-                                    break;
+                                    if (collider->overlaps(checkPosition, *otherCollider, otherEntity->localTransform.position)) {
+                                        stillGrounded = true;
+                                        break;
+                                    }
                                 }
                             }
                             
-                            if (!stillGrounded) {
-                                player->isGrounded = false;
-                            }
+                            (*isGrounded) = stillGrounded;
                         }
                     }
                 }

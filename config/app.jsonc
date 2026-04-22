@@ -45,13 +45,21 @@
                 "clay": "assets/textures/clay.png",
                 "glass": "assets/textures/glass.png",
                 "monkey": "assets/textures/monkey.png",
-                "hearts": "assets/textures/hearts.png"
+                "hearts": "assets/textures/hearts.png",
+                "meats": "assets/textures/meat_rbg.png",
+                "pig": "assets/textures/pig.png",
+                "chicken": "assets/textures/chicken.png",
+                "horse": "assets/textures/horse.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
                 "monkey": "assets/models/monkey.obj",
                 "plane": "assets/models/plane.obj",
-                "sphere": "assets/models/sphere.obj"
+                "sphere": "assets/models/sphere.obj",
+                "cow": "assets/models/cow.obj",
+                "pig": "assets/models/pig.obj",
+                "chicken": "assets/models/chicken.obj",
+                "horse": "assets/models/horse.obj"
             },
             "samplers": {
                 "default": {},
@@ -67,47 +75,87 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [0.45, 0.4, 0.5, 1]
+                    "tint": [
+                        0.45,
+                        0.4,
+                        0.5,
+                        1
+                    ]
                 },
                 "lit-red": {
                     "type": "lit",
                     "shader": "lit",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 0.3, 0.3, 1],
+                    "tint": [
+                        1,
+                        0.3,
+                        0.3,
+                        1
+                    ],
                     "shininess": 32.0
                 },
                 "lit-blue": {
                     "type": "lit",
                     "shader": "lit",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [0.3, 0.3, 1.0, 1],
+                    "tint": [
+                        0.3,
+                        0.3,
+                        1.0,
+                        1
+                    ],
                     "shininess": 64.0
                 },
                 "lit-gold": {
                     "type": "lit",
                     "shader": "lit",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 0.84, 0.0, 1],
+                    "tint": [
+                        1.0,
+                        0.84,
+                        0.0,
+                        1
+                    ],
                     "shininess": 128.0
                 },
                 "glass": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true },
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        },
                         "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
@@ -116,7 +164,12 @@
                         "depthMask": false
                     },
                     "transparent": true,
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "glass",
                     "sampler": "pixelated"
                 },
@@ -124,10 +177,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "grass",
                     "sampler": "pixelated"
                 },
@@ -135,10 +197,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "grass-top",
                     "sampler": "pixelated"
                 },
@@ -146,10 +217,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "grass-side",
                     "sampler": "pixelated"
                 },
@@ -157,10 +237,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "dirt",
                     "sampler": "pixelated"
                 },
@@ -168,10 +257,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "wood",
                     "sampler": "pixelated"
                 },
@@ -179,10 +277,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "monkey",
                     "sampler": "default"
                 },
@@ -190,10 +297,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1, 1, 1, 1],
+                    "tint": [
+                        1,
+                        1,
+                        1,
+                        1
+                    ],
                     "texture": "moon",
                     "sampler": "default"
                 },
@@ -201,19 +317,37 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 0.0, 1.0, 1.0]
+                    "tint": [
+                        1.0,
+                        0.0,
+                        1.0,
+                        1.0
+                    ]
                 },
                 "stone": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
                     "texture": "stone",
                     "sampler": "pixelated"
                 },
@@ -221,8 +355,12 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true },
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        },
                         "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
@@ -230,16 +368,30 @@
                         }
                     },
                     "transparent": true,
-                    "tint": [0.2, 0.4, 0.9, 0.8]
+                    "tint": [
+                        0.2,
+                        0.4,
+                        0.9,
+                        0.8
+                    ]
                 },
                 "sand": {
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "tint": [
+                        0.9,
+                        0.9,
+                        0.9,
+                        1.0
+                    ],
                     "texture": "sand",
                     "sampler": "pixelated"
                 },
@@ -247,10 +399,19 @@
                     "type": "textured",
                     "shader": "textured",
                     "pipelineState": {
-                        "faceCulling": { "enabled": true },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
                     "texture": "clay",
                     "sampler": "pixelated"
                 },
@@ -258,29 +419,53 @@
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true }
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
                     },
-                    "tint": [1.0, 1.0, 0.8, 1.0]
+                    "tint": [
+                        1.0,
+                        1.0,
+                        0.8,
+                        1.0
+                    ]
                 },
                 "wireframe": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true, "function": "GL_LEQUAL" },
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true,
+                            "function": "GL_LEQUAL"
+                        },
                         "polygonMode": "GL_LINE",
                         "lineWidth": 1.0,
                         "depthMask": false
                     },
-                    "tint": [0.0, 0.0, 0.0, 1.0]
+                    "tint": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0
+                    ]
                 },
                 "highlight-fill": {
                     "type": "tinted",
                     "shader": "tinted",
                     "pipelineState": {
-                        "faceCulling": { "enabled": false },
-                        "depthTesting": { "enabled": true, "function": "GL_LEQUAL" },
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true,
+                            "function": "GL_LEQUAL"
+                        },
                         "blending": {
                             "enabled": true,
                             "sourceFactor": "GL_SRC_ALPHA",
@@ -289,38 +474,285 @@
                         "depthMask": false
                     },
                     "transparent": true,
-                    "tint": [0.0, 0.0, 0.0, 0.2]
+                    "tint": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.2
+                    ]
+                },
+                "pig-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "pig",
+                    "sampler": "pixelated",
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "chicken-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "chicken",
+                    "sampler": "pixelated",
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "cow-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "horse",
+                    "sampler": "pixelated",
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "sheep-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "brown_wool",
+                    "sampler": "pixelated",
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "bee-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1.0,
+                        0.85,
+                        0.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "cat-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        0.9,
+                        0.6,
+                        0.3,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "frog-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        0.2,
+                        0.65,
+                        0.15,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "chest-mat": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "wood",
+                    "sampler": "pixelated",
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
                 }
             }
         },
         "world": [
             {
-                "position": [0, 0, 0],
-                "rotation": [0, 0, 0],
+                "position": [
+                    0,
+                    0,
+                    0
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ],
                 "name": "daylight",
-                "components": [{
-                    "type": "Light",
-                    "lightType": "directional",
-                    "color": [0.95, 0.98, 1.0],
-                    "ambient": [1.0, 0.9, 0.8],
-                    "enabled": true
-                }]
-            },
+                "components": [
+                    {
+                        "type": "Light",
+                        "lightType": "directional",
+                        "color": [
+                            0.55,
+                            0.55,
+                            0.6
+                        ],
+                        "ambient": [
+                            0.2,
+                            0.2,
+                            0.25
+                        ],
+                        "enabled": true
+                    }
+                ]
+             },
             {
-                "position": [0, 0, 0],
-                "rotation": [0, 0, 0],
+                "position": [
+                    0,
+                    0,
+                    0
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ],
                 "name": "nightlight",
-                "components": [{
-                    "type": "Light",
-                    "lightType": "directional",
-                    "color": [0.05, 0.05, 0.2],
-                    "ambient": [0.01, 0.01, 0.03],
-                    "enabled": false
-                }]
+                "components": [
+                    {
+                        "type": "Light",
+                        "lightType": "directional",
+                        "color": [
+                            0.05,
+                            0.05,
+                            0.2
+                        ],
+                       "ambient": [0.35, 0.35, 0.45],
+                        "enabled": false
+                    }
+                ]
             },
             {
-                "position": [0, 50, -50],
-                "scale": [2.0, 2.0, 2.0],
+                "position": [
+                    0,
+                    50,
+                    -50
+                ],
+                "scale": [
+                    2.0,
+                    2.0,
+                    2.0
+                ],
                 "name": "sun",
                 "components": [
                     {
@@ -331,20 +763,42 @@
                     {
                         "type": "Light",
                         "lightType": "point",
-                        "color": [1.0, 0.95, 0.8],
-                        "ambient": [0.6, 0.6, 0.5],
-                        "attenuation": [1.0, 0.02, 0.001],
+                        "color": [
+                            1.0,
+                            0.95,
+                            0.8
+                        ],
+                        "ambient": [
+                            0.1,
+                            0.1,
+                            0.1
+                        ],
+                        "attenuation": [
+                            1.0,
+                            0.02,
+                            0.001
+                        ],
                         "enabled": true
                     }
                 ]
             },
             {
-                "position": [8, 20, 25],
-                "rotation": [-45, 0, 0],
+                "position": [
+                    8,
+                    20,
+                    25
+                ],
+                "rotation": [
+                    -45,
+                    0,
+                    0
+                ],
                 "components": [
-                    { "type": "Camera" },
-                    { 
-                        "type": "PlayerComponent", 
+                    {
+                        "type": "Camera"
+                    },
+                    {
+                        "type": "PlayerComponent",
                         "maxHealth": 100,
                         "health": 100,
                         "waterDamageInterval": 2.0,
@@ -358,10 +812,268 @@
                     },
                     {
                         "type": "AABBCollider",
-                        "halfSize": [0.3, 0.9, 0.3],
-                        "center": [0, -0.9, 0]
+                        "halfSize": [
+                            0.3,
+                            0.9,
+                            0.3
+                        ],
+                        "center": [
+                            0,
+                            -0.9,
+                            0
+                        ]
                     }
                 ]
+            }
+        ],
+        "npcTypes": [
+            {
+                "mesh": "pig",
+                "material": "pig-mat",
+                "scale": [
+                    0.10,
+                    0.10,
+                    0.10
+                ],
+                "components": {
+                    "foodReward": 3,
+                    "npcType": "pig",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.8,
+                            0.5,
+                            0.8
+                        ],
+                        "center": [
+                            0.0,
+                            -0.3,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.0,
+                    "moveRadius": 5.0,
+                    "waitTime": 2.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "chicken",
+                "material": "chicken-mat",
+                "scale": [
+                    0.08,
+                    0.08,
+                    0.08
+                ],
+                "components": {
+                    "foodReward": 1,
+                    "npcType": "chicken",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.4,
+                            0.4,
+                            0.4
+                        ],
+                        "center": [
+                            0.0,
+                            -0.2,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 3.0,
+                    "moveRadius": 8.0,
+                    "waitTime": 1.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "cow",
+                "material": "cow-mat",
+                "scale": [
+                    0.12,
+                    0.12,
+                    0.12
+                ],
+                "components": {
+                    "foodReward": 3,
+                    "npcType": "cow",
+                    "AABBCollider": {
+                        "halfSize": [
+                            1.0,
+                            0.6,
+                            1.0
+                        ],
+                        "center": [
+                            0.0,
+                            -1.44,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 1.5,
+                    "moveRadius": 4.0,
+                    "waitTime": 3.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "sheep",
+                "material": "sheep-mat",
+                "scale": [
+                    0.10,
+                    0.10,
+                    0.10
+                ],
+                "components": {
+                    "foodReward": 2,
+                    "npcType": "sheep",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.4,
+                            0.5,
+                            0.4
+                        ],
+                        "center": [
+                            0.0,
+                            0.5,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.0,
+                    "moveRadius": 6.0,
+                    "waitTime": 2.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "bee",
+                "material": "bee-mat",
+                "scale": [
+                    0.06,
+                    0.06,
+                    0.06
+                ],
+                "components": {
+                    "foodReward": 1,
+                    "npcType": "bee",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.2,
+                            0.2,
+                            0.2
+                        ],
+                        "center": [
+                            0.0,
+                            -3.586,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 4.0,
+                    "moveRadius": 10.0,
+                    "waitTime": 0.5,
+                    "movementType": "follow_player"
+                }
+            },
+            {
+                "mesh": "cat",
+                "material": "cat-mat",
+                "scale": [
+                    0.09,
+                    0.09,
+                    0.09
+                ],
+                "components": {
+                    "foodReward": 2,
+                    "npcType": "cat",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.3,
+                            0.4,
+                            0.3
+                        ],
+                        "center": [
+                            0.0,
+                            0.4,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.5,
+                    "moveRadius": 7.0,
+                    "waitTime": 1.5,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "frog",
+                "material": "frog-mat",
+                "scale": [
+                    0.08,
+                    0.08,
+                    0.08
+                ],
+                "components": {
+                    "foodReward": 1,
+                    "npcType": "frog",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.3,
+                            0.3,
+                            0.3
+                        ],
+                        "center": [
+                            0.0,
+                            0.3,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.0,
+                    "moveRadius": 3.0,
+                    "waitTime": 4.0,
+                    "movementType": "patrol"
+                }
+            },
+            {
+                "mesh": "cube",
+                "material": "chest-mat",
+                "scale": [
+                    0.15,
+                    0.12,
+                    0.15
+                ],
+                "components": {
+                    "foodReward": 5,
+                    "npcType": "chest",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.5,
+                            0.4,
+                            0.5
+                        ],
+                        "center": [
+                            0.0,
+                            0.28,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 0.0,
+                    "moveRadius": 0.0,
+                    "waitTime": 0.0,
+                    "movementType": "idle"
+                }
             }
         ]
     }

@@ -46,7 +46,12 @@ class EntityTestState : public our::State
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         // First, we look for a camera and if none was found, we return (there is nothing we can render)
-        our::CameraComponent *camera = find<our::CameraComponent>(&world);
+        our::CameraComponent *camera = nullptr;
+        for (auto entity : world.getEntities()) {
+            if (entity && (camera = entity->getComponent<our::CameraComponent>())) {
+                break;
+            }
+        }
         if (camera == nullptr)
             return;
 

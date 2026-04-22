@@ -164,6 +164,7 @@ namespace our
 
         for (auto entity : world->getEntities())
         {
+            if (!entity) continue;
             // Find the first camera in the world (needed for rendering)
             if (!camera)
                 camera = entity->getComponent<CameraComponent>();
@@ -173,7 +174,7 @@ namespace our
                 sunEntity = entity;
 
             // Collect mesh renderer components into render commands
-            if (auto meshRenderer = entity->getComponent<MeshRendererComponent>(); meshRenderer && meshRenderer->enabled)
+            if (auto meshRenderer = entity->getComponent<MeshRendererComponent>(); meshRenderer && meshRenderer->enabled && meshRenderer->mesh && meshRenderer->material)
             {
                 RenderCommand command;
                 command.localToWorld = meshRenderer->getOwner()->getLocalToWorldMatrix();
@@ -310,6 +311,26 @@ namespace our
         // Get camera world position for view direction in lighting calculations
         glm::vec3 cameraPosition = camera->getOwner()->getLocalToWorldMatrix() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 
+        // Damage flash effect - check if any light has active flash timer.
+        // We calculate this once per frame to avoid O(N*M) complexity in the draw loops.
+        float maxFlashStrength = 0.0f;
+        glm::vec3 activeFlashColor = glm::vec3(1.0f, 0.0f, 0.0f);
+        for (auto entity : world->getEntities())
+        {
+            if (auto *lc = entity->getComponent<LightComponent>())
+            {
+                if (lc->flashTimer > 0.0f)
+                {
+                    float strength = std::min(lc->flashTimer, 1.0f);
+                    if (strength > maxFlashStrength)
+                    {
+                        maxFlashStrength = strength;
+                        activeFlashColor = lc->flashColor;
+                    }
+                }
+            }
+        }
+
         // PHASE 3: Draw opaque objects
         // For each render command, we set up uniforms based on material type.
         // LitMaterial gets extra lighting uniforms (transform, model, normalMatrix, lights).
@@ -329,25 +350,6 @@ namespace our
                 sh->set("normalMatrix", glm::mat3(glm::transpose(glm::inverse(command.localToWorld))));
                 uploadLights(sh, cameraPosition);
 
-                // Damage flash effect - check if any light has active flash timer
-                // Iterate entities to find lights with active flash
-                float maxFlashStrength = 0.0f;
-                glm::vec3 activeFlashColor = glm::vec3(1.0f, 0.0f, 0.0f);
-                for (auto entity : world->getEntities())
-                {
-                    if (auto *lc = entity->getComponent<LightComponent>())
-                    {
-                        if (lc->flashTimer > 0.0f)
-                        {
-                            float strength = std::min(lc->flashTimer, 1.0f);
-                            if (strength > maxFlashStrength)
-                            {
-                                maxFlashStrength = strength;
-                                activeFlashColor = lc->flashColor;
-                            }
-                        }
-                    }
-                }
                 sh->set("flashStrength", maxFlashStrength);
                 sh->set("flashColor", activeFlashColor);
             }
@@ -400,24 +402,6 @@ namespace our
                 sh->set("normalMatrix", glm::mat3(glm::transpose(glm::inverse(command.localToWorld))));
                 uploadLights(sh, cameraPosition);
 
-                // Damage flash effect for transparent objects
-                float maxFlashStrength = 0.0f;
-                glm::vec3 activeFlashColor = glm::vec3(1.0f, 0.0f, 0.0f);
-                for (auto entity : world->getEntities())
-                {
-                    if (auto *lc = entity->getComponent<LightComponent>())
-                    {
-                        if (lc->flashTimer > 0.0f)
-                        {
-                            float strength = std::min(lc->flashTimer, 1.0f);
-                            if (strength > maxFlashStrength)
-                            {
-                                maxFlashStrength = strength;
-                                activeFlashColor = lc->flashColor;
-                            }
-                        }
-                    }
-                }
                 sh->set("flashStrength", maxFlashStrength);
                 sh->set("flashColor", activeFlashColor);
             }
@@ -453,9 +437,18 @@ namespace our
                 postprocessMaterial->shader->set("cameraFar", camera->far);
             }
 
-            // Set fog enabled state (for day/night cycle)
+            // Determine night from scene light state rather than fog flag.
+            bool isNight = false;
+            for (auto entity : world->getEntities()) {
+                if (entity && entity->name == "nightlight") {
+                    if (auto *nightLc = entity->getComponent<LightComponent>()) {
+                        isNight = nightLc->enabled;
+                    }
+                    break;
+                }
+            }
             postprocessMaterial->shader->set("enableFog", fogEnabled);
-            postprocessMaterial->shader->set("isNight", fogEnabled);
+            postprocessMaterial->shader->set("isNight", isNight);
 
             glBindVertexArray(postProcessVertexArray);
             glDrawArrays(GL_TRIANGLES, 0, 3);

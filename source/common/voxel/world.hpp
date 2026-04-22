@@ -30,7 +30,9 @@ public:
 
     RayHit castRay(glm::vec3 start, glm::vec3 direction, float maxDistance = 8.0f) const;
     void breakBlock(const RayHit& hit);
-    void placeBlock(const RayHit& hit, int type);
+     void placeBlock(const RayHit& hit, int type);
+     
+     int getLight(int worldX, int y, int worldZ) const;
 };
 
 } // namespace voxel
