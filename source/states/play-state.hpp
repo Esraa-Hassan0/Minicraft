@@ -11,6 +11,7 @@
 #include <systems/light.hpp>
 #include <systems/time-system.hpp>
 #include <systems/block-interaction.hpp>
+#include <systems/npc-movement-system.hpp>
 #include <asset-loader.hpp>
 #include <texture/texture2d.hpp>
 #include <voxel/world.hpp>
@@ -34,8 +35,10 @@
 #include <cstdint>
 #include <cstdio>
 
-class Playstate : public our::State {
-    struct NPCSpawnData {
+class Playstate : public our::State
+{
+    struct NPCSpawnData
+    {
         int chunkX, chunkZ;
         int localX, localY, localZ;
         float scaleX, scaleY, scaleZ;
@@ -44,28 +47,32 @@ class Playstate : public our::State {
         std::string npcType;
         float speed, moveRadius, waitTime;
         std::string movementType;
+        glm::vec3 aabbCenter;
+        glm::vec3 aabbHalfSize;
     };
 
-    struct ChunkRenderGroup {
-        std::vector<our::Entity*> entities;
-        std::vector<our::Mesh*> meshes;
+    struct ChunkRenderGroup
+    {
+        std::vector<our::Entity *> entities;
+        std::vector<our::Mesh *> meshes;
         std::vector<NPCSpawnData> npcs;
     };
 
-    // Terrain and ECS Systems
-    voxel::World terrainWorld;
-    our::World engineWorld;
-    our::ForwardRenderer renderer;
-    our::FreeCameraControllerSystem cameraController;
-    our::MovementSystem movementSystem;
-    our::PlayerControllerSystem playerController;
-    our::CollisionSystem collisionSystem;
-    our::LightSystem lightSystem;
-    our::TimeSystem timeSystem;
-    our::Entity* highlightEntity = nullptr;      // Semi-transparent fill
-    our::Entity* highlightEdgesEntity = nullptr; // Clean square borders
-    our::Mesh* highlightEdgesMesh = nullptr;     // Line-based mesh for borders
-    BlockInteractionSystem blockInteraction;
+     // Terrain and ECS Systems
+     voxel::World terrainWorld;
+     our::World engineWorld;
+     our::ForwardRenderer renderer;
+     our::FreeCameraControllerSystem cameraController;
+     our::MovementSystem movementSystem;
+     our::PlayerControllerSystem playerController;
+     our::CollisionSystem collisionSystem;
+     our::LightSystem lightSystem;
+     our::TimeSystem timeSystem;
+     our::NPCMovementSystem npcMovementSystem;
+     our::Entity *highlightEntity = nullptr;      // Semi-transparent fill
+     our::Entity *highlightEdgesEntity = nullptr; // Clean square borders
+     our::Mesh *highlightEdgesMesh = nullptr;     // Line-based mesh for borders
+     BlockInteractionSystem blockInteraction;
 
     // Chunk Streaming State
     int chunkLoadRadius = 2;
@@ -79,98 +86,135 @@ class Playstate : public our::State {
     // --- Inventory & Hotbar Helpers ---
     static constexpr int kHotbarSlots = 5;
 
-    static int hotbarBlockType(int slot) {
+    static int hotbarBlockType(int slot)
+    {
         static const int types[kHotbarSlots] = {
             voxel::GRASS, voxel::DIRT, voxel::WOOD, voxel::STONE, voxel::SAND};
         return types[std::clamp(slot, 0, kHotbarSlots - 1)];
     }
 
-    static int* inventoryCountForType(our::PlayerComponent* player, int blockType) {
-        switch (blockType) {
-            case voxel::GRASS: return &player->inventoryGrass;
-            case voxel::DIRT:  return &player->inventoryDirt;
-            case voxel::WOOD:  return &player->inventoryWood;
-            case voxel::STONE: return &player->inventoryStone;
-            case voxel::SAND:  return &player->inventorySand;
-            default:           return nullptr;
+    static int *inventoryCountForType(our::PlayerComponent *player, int blockType)
+    {
+        switch (blockType)
+        {
+        case voxel::GRASS:
+            return &player->inventoryGrass;
+        case voxel::DIRT:
+            return &player->inventoryDirt;
+        case voxel::WOOD:
+            return &player->inventoryWood;
+        case voxel::STONE:
+            return &player->inventoryStone;
+        case voxel::SAND:
+            return &player->inventorySand;
+        default:
+            return nullptr;
         }
     }
 
-    void registerCollectedBlock(our::PlayerComponent* player, int blockType) {
-        int* slot = inventoryCountForType(player, blockType);
-        if (slot) {
+    void registerCollectedBlock(our::PlayerComponent *player, int blockType)
+    {
+        int *slot = inventoryCountForType(player, blockType);
+        if (slot)
+        {
             (*slot)++;
             player->resourcesCollected++;
-            if (player->resourcesCollected >= player->resourcesRequired) {
+            if (player->resourcesCollected >= player->resourcesRequired)
+            {
                 player->gameState = our::GameState::WIN;
             }
         }
     }
 
     // --- Utility & Search ---
-    static int worldToChunkCoordinate(float worldCoord) {
+    static int worldToChunkCoordinate(float worldCoord)
+    {
         return static_cast<int>(std::floor(worldCoord / static_cast<float>(voxel::Chunk::CHUNK_SIZE)));
     }
 
-    our::Entity* findPlayerEntity() {
-        for (auto entity : engineWorld.getEntities()) {
-            if (!entity) continue;
-            auto* camera = entity->getComponent<our::CameraComponent>();
-            auto* player = entity->getComponent<our::PlayerComponent>();
-            if (camera && player) return entity;
+    our::Entity *findPlayerEntity()
+    {
+        for (auto entity : engineWorld.getEntities())
+        {
+            if (!entity)
+                continue;
+            auto *camera = entity->getComponent<our::CameraComponent>();
+            auto *player = entity->getComponent<our::PlayerComponent>();
+            if (camera && player)
+                return entity;
         }
         return nullptr;
     }
 
-    our::Material* getMaterialForBlockType(int blockType) {
-        switch (blockType) {
-            case voxel::STONE: return our::AssetLoader<our::Material>::get("stone");
-            case voxel::GRASS: return nullptr; // Grass is handled manually per face
-            case voxel::DIRT:  return our::AssetLoader<our::Material>::get("dirt");
-            case voxel::SAND:  return our::AssetLoader<our::Material>::get("sand");
-            case voxel::WATER: return our::AssetLoader<our::Material>::get("water");
-            case voxel::WOOD:  return our::AssetLoader<our::Material>::get("wood");
-            default:           return our::AssetLoader<our::Material>::get("default");
+    our::Material *getMaterialForBlockType(int blockType)
+    {
+        switch (blockType)
+        {
+        case voxel::STONE:
+            return our::AssetLoader<our::Material>::get("stone");
+        case voxel::GRASS:
+            return nullptr; // Grass is handled manually per face
+        case voxel::DIRT:
+            return our::AssetLoader<our::Material>::get("dirt");
+        case voxel::SAND:
+            return our::AssetLoader<our::Material>::get("sand");
+        case voxel::WATER:
+            return our::AssetLoader<our::Material>::get("water");
+        case voxel::WOOD:
+            return our::AssetLoader<our::Material>::get("wood");
+        default:
+            return our::AssetLoader<our::Material>::get("default");
         }
     }
 
     // --- Chunk Rendering Management (from world/chunks) ---
-    void clearChunkRenderGroup(const std::string& chunkKey) {
+    void clearChunkRenderGroup(const std::string &chunkKey)
+    {
         auto it = chunkRenderGroups.find(chunkKey);
-        if (it == chunkRenderGroups.end()) return;
-        for (auto* entity : it->second.entities) engineWorld.markForRemoval(entity);
-        for (auto* mesh : it->second.meshes) delete mesh;
+        if (it == chunkRenderGroups.end())
+            return;
+        for (auto *entity : it->second.entities)
+            engineWorld.markForRemoval(entity);
+        for (auto *mesh : it->second.meshes)
+            delete mesh;
         chunkRenderGroups.erase(it);
     }
 
-    void clearAllChunkRenderGroups() {
-        for (auto& entry : chunkRenderGroups) {
-            for (auto* entity : entry.second.entities) engineWorld.markForRemoval(entity);
-            for (auto* mesh : entry.second.meshes) delete mesh;
+    void clearAllChunkRenderGroups()
+    {
+        for (auto &entry : chunkRenderGroups)
+        {
+            for (auto *entity : entry.second.entities)
+                engineWorld.markForRemoval(entity);
+            for (auto *mesh : entry.second.meshes)
+                delete mesh;
         }
         chunkRenderGroups.clear();
     }
 
-    void buildChunkRenderGroup(const std::string& chunkKey, const voxel::Chunk& chunk) {
+    void buildChunkRenderGroup(const std::string &chunkKey, const voxel::Chunk &chunk)
+    {
         ChunkRenderGroup renderGroup;
         const int meshBlockTypes[] = {
-            voxel::STONE, voxel::DIRT, voxel::SAND, 
-            voxel::WATER, voxel::WOOD, voxel::LEAF, voxel::Diamond, voxel::Glass
-        };
+            voxel::STONE, voxel::DIRT, voxel::SAND,
+            voxel::WATER, voxel::WOOD, voxel::LEAF, voxel::Diamond, voxel::Glass};
 
         glm::vec3 chunkOrigin(chunk.chunkX * voxel::Chunk::CHUNK_SIZE, 0.0f, chunk.chunkZ * voxel::Chunk::CHUNK_SIZE);
 
-        for (int blockType : meshBlockTypes) {
-            our::Material* material = getMaterialForBlockType(blockType);
-            if (!material) continue;
+        for (int blockType : meshBlockTypes)
+        {
+            our::Material *material = getMaterialForBlockType(blockType);
+            if (!material)
+                continue;
 
-            our::Mesh* chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, blockType);
-            if (!chunkMesh) continue;
+            our::Mesh *chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, blockType);
+            if (!chunkMesh)
+                continue;
 
-            our::Entity* chunkEntity = engineWorld.add();
+            our::Entity *chunkEntity = engineWorld.add();
             chunkEntity->localTransform.position = chunkOrigin;
 
-            auto* meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
+            auto *meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
             meshRenderer->mesh = chunkMesh;
             meshRenderer->material = material;
 
@@ -179,16 +223,19 @@ class Playstate : public our::State {
         }
 
         // Handle GRASS blocks manually to support different textures per face
-        auto addGrassFaces = [&](our::mesh_utils::FaceCategory faceCat, const char* matName) {
-            our::Material* material = our::AssetLoader<our::Material>::get(matName);
-            if (!material) return;
-            our::Mesh* chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, voxel::GRASS, faceCat);
-            if (!chunkMesh) return;
+        auto addGrassFaces = [&](our::mesh_utils::FaceCategory faceCat, const char *matName)
+        {
+            our::Material *material = our::AssetLoader<our::Material>::get(matName);
+            if (!material)
+                return;
+            our::Mesh *chunkMesh = our::mesh_utils::buildChunkMesh(chunk, terrainWorld, voxel::GRASS, faceCat);
+            if (!chunkMesh)
+                return;
 
-            our::Entity* chunkEntity = engineWorld.add();
+            our::Entity *chunkEntity = engineWorld.add();
             chunkEntity->localTransform.position = chunkOrigin;
 
-            auto* meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
+            auto *meshRenderer = chunkEntity->addComponent<our::MeshRendererComponent>();
             meshRenderer->mesh = chunkMesh;
             meshRenderer->material = material;
 
@@ -203,21 +250,27 @@ class Playstate : public our::State {
         chunkRenderGroups[chunkKey] = std::move(renderGroup);
     }
 
-    void rebuildMesh() {
+    void rebuildMesh()
+    {
         int chunksUpdatedThisFrame = 0;
         bool stillHasDirtyChunks = false;
 
-        for (auto& entry : terrainWorld.activeChunks) {
-            voxel::Chunk& chunk = entry.second;
+        for (auto &entry : terrainWorld.activeChunks)
+        {
+            voxel::Chunk &chunk = entry.second;
             bool hasGroup = chunkRenderGroups.count(entry.first);
-            if (!chunk.isDirty && hasGroup) continue;
+            if (!chunk.isDirty && hasGroup)
+                continue;
 
-            if (chunksUpdatedThisFrame == 0) {
+            if (chunksUpdatedThisFrame == 0)
+            {
                 clearChunkRenderGroup(entry.first);
                 buildChunkRenderGroup(entry.first, chunk);
                 chunk.isDirty = false;
                 chunksUpdatedThisFrame++;
-            } else {
+            }
+            else
+            {
                 stillHasDirtyChunks = true;
                 break;
             }
@@ -227,91 +280,138 @@ class Playstate : public our::State {
     }
 
     // --- Streaming Logic ---
-    void updateLoadedChunks(int centerChunkX, int centerChunkZ) {
+    void updateLoadedChunks(int centerChunkX, int centerChunkZ)
+    {
         bool chunkSetChanged = false;
-        for (int dz = -chunkLoadRadius; dz <= chunkLoadRadius; ++dz) {
-            for (int dx = -chunkLoadRadius; dx <= chunkLoadRadius; ++dx) {
+        for (int dz = -chunkLoadRadius; dz <= chunkLoadRadius; ++dz)
+        {
+            for (int dx = -chunkLoadRadius; dx <= chunkLoadRadius; ++dx)
+            {
                 int cx = centerChunkX + dx, cz = centerChunkZ + dz;
                 std::string key = std::to_string(cx) + "_" + std::to_string(cz);
-                if (terrainWorld.activeChunks.find(key) == terrainWorld.activeChunks.end()) {
+                if (terrainWorld.activeChunks.find(key) == terrainWorld.activeChunks.end())
+                {
                     terrainWorld.generateChunk(cx, cz);
                     chunkSetChanged = true;
                 }
             }
         }
 
-        for (auto it = terrainWorld.activeChunks.begin(); it != terrainWorld.activeChunks.end();) {
+        for (auto it = terrainWorld.activeChunks.begin(); it != terrainWorld.activeChunks.end();)
+        {
             if (std::abs(it->second.chunkX - centerChunkX) > chunkUnloadRadius ||
-                std::abs(it->second.chunkZ - centerChunkZ) > chunkUnloadRadius) {
+                std::abs(it->second.chunkZ - centerChunkZ) > chunkUnloadRadius)
+            {
                 clearChunkRenderGroup(it->first);
                 it = terrainWorld.activeChunks.erase(it);
                 chunkSetChanged = true;
-            } else ++it;
+            }
+            else
+                ++it;
         }
-        if (chunkSetChanged) terrainMeshDirty = true;
+        if (chunkSetChanged)
+            terrainMeshDirty = true;
     }
 
-    void streamChunksAroundPlayer(const glm::vec3& position) {
+    void streamChunksAroundPlayer(const glm::vec3 &position)
+    {
         int px = worldToChunkCoordinate(position.x);
         int pz = worldToChunkCoordinate(position.z);
-        if (px != currentCenterChunkX || pz != currentCenterChunkZ) {
-            currentCenterChunkX = px; currentCenterChunkZ = pz;
+        if (px != currentCenterChunkX || pz != currentCenterChunkZ)
+        {
+            currentCenterChunkX = px;
+            currentCenterChunkZ = pz;
             updateLoadedChunks(px, pz);
         }
     }
 
     // --- UI Drawing (Combined) ---
-    static void drawHotbarResourceIcon(ImDrawList* dl, int hotbarSlot, const ImVec2& iconMin, const ImVec2& iconMax) {
+    static void drawHotbarResourceIcon(ImDrawList *dl, int hotbarSlot, const ImVec2 &iconMin, const ImVec2 &iconMax)
+    {
         const ImU32 outline = IM_COL32(18, 18, 22, 220);
-        our::Texture2D* tex = nullptr;
+        our::Texture2D *tex = nullptr;
         ImU32 fallbackColor = IM_COL32(60, 60, 65, 255);
 
-        if(hotbarSlot == 0) { tex = our::AssetLoader<our::Texture2D>::get("grass-side"); fallbackColor = IM_COL32(72, 130, 58, 255); }
-        else if(hotbarSlot == 1) { tex = our::AssetLoader<our::Texture2D>::get("dirt"); fallbackColor = IM_COL32(115, 77, 51, 255); }
-        else if(hotbarSlot == 2) { tex = our::AssetLoader<our::Texture2D>::get("wood"); fallbackColor = IM_COL32(130, 85, 48, 255); }
-        else if(hotbarSlot == 3) { tex = our::AssetLoader<our::Texture2D>::get("stone"); fallbackColor = IM_COL32(118, 118, 118, 255); }
-        else if(hotbarSlot == 4) { tex = our::AssetLoader<our::Texture2D>::get("sand"); fallbackColor = IM_COL32(204, 190, 72, 255); }
+        if (hotbarSlot == 0)
+        {
+            tex = our::AssetLoader<our::Texture2D>::get("grass-side");
+            fallbackColor = IM_COL32(72, 130, 58, 255);
+        }
+        else if (hotbarSlot == 1)
+        {
+            tex = our::AssetLoader<our::Texture2D>::get("dirt");
+            fallbackColor = IM_COL32(115, 77, 51, 255);
+        }
+        else if (hotbarSlot == 2)
+        {
+            tex = our::AssetLoader<our::Texture2D>::get("wood");
+            fallbackColor = IM_COL32(130, 85, 48, 255);
+        }
+        else if (hotbarSlot == 3)
+        {
+            tex = our::AssetLoader<our::Texture2D>::get("stone");
+            fallbackColor = IM_COL32(118, 118, 118, 255);
+        }
+        else if (hotbarSlot == 4)
+        {
+            tex = our::AssetLoader<our::Texture2D>::get("sand");
+            fallbackColor = IM_COL32(204, 190, 72, 255);
+        }
 
-        if (tex) dl->AddImage((ImTextureID)(intptr_t)tex->getOpenGLName(), iconMin, iconMax, ImVec2(0, 1), ImVec2(1, 0));  // to fix the inverted texture
-        else dl->AddRectFilled(iconMin, iconMax, fallbackColor, 4.0f);
+        if (tex)
+            dl->AddImage((ImTextureID)(intptr_t)tex->getOpenGLName(), iconMin, iconMax, ImVec2(0, 1), ImVec2(1, 0)); // to fix the inverted texture
+        else
+            dl->AddRectFilled(iconMin, iconMax, fallbackColor, 4.0f);
         dl->AddRect(iconMin, iconMax, outline, 4.0f, ImDrawCornerFlags_All, 1.25f);
     }
 
-void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
-    if (!npcEntity || !player) return;
-    auto* killable = npcEntity->getComponent<our::KillableNPCComponent>();
-    if (killable) {
-        if (killable->npcType == "chest") {
-            // Increase health for chests, capped at max health
-            player->health = std::min(player->health + killable->foodReward, player->maxHealth);
-        } else {
-            // Original behavior for other NPCs (increase meat count)
-            player->meatCount += killable->foodReward;
+    void killNPCAndAwardMeat(our::Entity *npcEntity, our::PlayerComponent *player)
+    {
+        if (!npcEntity || !player)
+            return;
+        auto *killable = npcEntity->getComponent<our::KillableNPCComponent>();
+        if (killable)
+        {
+            if (killable->npcType == "chest")
+            {
+                // Increase health for chests, capped at max health
+                player->health = std::min(player->health + killable->foodReward, player->maxHealth);
+            }
+            else
+            {
+                // Original behavior for other NPCs (increase meat count)
+                player->meatCount += killable->foodReward;
+            }
         }
+        engineWorld.markForRemoval(npcEntity);
     }
-    engineWorld.markForRemoval(npcEntity);
-}
 
-    our::Entity* findHitNPC(const glm::vec3& camPos, const glm::vec3& camDir, float maxDist) {
+    our::Entity *findHitNPC(const glm::vec3 &camPos, const glm::vec3 &camDir, float maxDist)
+    {
         float closestDist = maxDist;
-        our::Entity* closestNPC = nullptr;
+        our::Entity *closestNPC = nullptr;
 
-        for (auto entity : engineWorld.getEntities()) {
-            if (!entity) continue;
-            auto* killable = entity->getComponent<our::KillableNPCComponent>();
-            if (!killable) continue;
+        for (auto entity : engineWorld.getEntities())
+        {
+            if (!entity)
+                continue;
+            auto *killable = entity->getComponent<our::KillableNPCComponent>();
+            if (!killable)
+                continue;
 
             glm::vec3 npcPos = entity->localTransform.position;
             glm::vec3 toNPC = npcPos - camPos;
             float t = glm::dot(toNPC, camDir);
-            if (t < 0.0f) continue;
+            if (t < 0.0f)
+                continue;
 
             glm::vec3 closestPoint = camPos + camDir * t;
             glm::vec3 diff = closestPoint - npcPos;
             float distSq = glm::dot(diff, diff);
             float radius = 0.5f;
 
-            if (distSq < radius * radius && t < closestDist) {
+            if (distSq < radius * radius && t < closestDist)
+            {
                 closestDist = t;
                 closestNPC = entity;
             }
@@ -319,17 +419,24 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         return closestNPC;
     }
 
-    void updateMeatDecay(our::PlayerComponent* player, float deltaTime) {
-        if (!player) return;
+    void updateMeatDecay(our::PlayerComponent *player, float deltaTime)
+    {
+        if (!player)
+            return;
         player->meatDecayTimer += deltaTime;
-        if (player->meatDecayTimer >= 20.0f) {
+        if (player->meatDecayTimer >= 20.0f)
+        {
             player->meatDecayTimer = 0.0f;
-            if (player->meatCount > 0) {
+            if (player->meatCount > 0)
+            {
                 player->meatCount = std::max(0, player->meatCount - 1);
-            } else {
+            }
+            else
+            {
                 player->health = std::max(0.0f, player->health - 10.0f);
                 player->meatCount = player->meatMax;
-                if (player->health <= 0.0f) {
+                if (player->health <= 0.0f)
+                {
                     player->isAlive = false;
                     player->gameState = our::GameState::LOSE;
                 }
@@ -337,116 +444,13 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         }
     }
 
-    void updateNPCMovement(our::Entity* playerEntity, float deltaTime) {
-        if (!playerEntity) return;
-        glm::vec3 playerPos = playerEntity->localTransform.position;
 
-        for (auto entity : engineWorld.getEntities()) {
-            if (!entity) continue;
-            auto* movement = entity->getComponent<our::NPCMovementComponent>();
-            auto* killable = entity->getComponent<our::KillableNPCComponent>();
-            if (!movement || !killable) continue;
 
-            switch (movement->movementType) {
-                case our::NPCMovementComponent::MovementType::IDLE:
-                    break;
-
-                case our::NPCMovementComponent::MovementType::RANDOM_WALK:
-                    if (!movement->isMoving) {
-                        movement->waitTimer += deltaTime;
-                        if (movement->waitTimer >= movement->waitTime) {
-                            float angle = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f * 3.14159265f;
-                            float dist = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * movement->moveRadius;
-                            glm::vec3 offset(std::cos(angle) * dist, 0.0f, std::sin(angle) * dist);
-                            glm::vec3 newPos = movement->startPosition + offset;
-                            if (isValidNPCPosition(entity, newPos)) {
-                                movement->targetPosition = newPos;
-                                movement->isMoving = true;
-                            }
-                            movement->waitTimer = 0.0f;
-                        }
-                     } else {
-                         glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
-                         float dist = glm::length(dir);
-                         if (dist > 0.1f) {
-                             glm::vec3 moveDir = glm::normalize(dir);
-                             glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
-                             if (isValidNPCPosition(entity, newPos)) {
-                                 entity->localTransform.position = newPos;
-                             } else {
-                                 movement->blockedAttempts++;
-                                 if (movement->blockedAttempts > 3) {
-                                     movement->isMoving = false;
-                                     movement->blockedAttempts = 0;
-                                 }
-                             }
-                         } else {
-                             // Check if we should jump when blocked
-                             if (movement->isGrounded) {
-                                 // Apply upward velocity for jumping (1 block high)
-                                 movement->velocity.y = 5.0f; // Jump strength
-                                 movement->isGrounded = false;
-                             }
-                             movement->isMoving = false;
-                         }
-                    }
-                    break;
-
-                case our::NPCMovementComponent::MovementType::PATROL:
-                    if (!movement->isMoving) {
-                        movement->waitTimer += deltaTime;
-                        if (movement->waitTimer >= movement->waitTime) {
-                            glm::vec3 dir = movement->targetPosition - movement->startPosition;
-                            if (glm::length(dir) > movement->moveRadius || glm::length(entity->localTransform.position - movement->targetPosition) < 0.1f) {
-                                movement->targetPosition = movement->startPosition;
-                            }
-                            glm::vec3 newTarget = movement->targetPosition + dir;
-                            if (isValidNPCPosition(entity, newTarget)) {
-                                movement->targetPosition = newTarget;
-                                movement->isMoving = true;
-                            }
-                            movement->waitTimer = 0.0f;
-                        }
-                    } else {
-                        glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
-                        float dist = glm::length(dir);
-                        if (dist > 0.1f) {
-                            glm::vec3 moveDir = glm::normalize(dir);
-                            glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
-                            if (isValidNPCPosition(entity, newPos)) {
-                                entity->localTransform.position = newPos;
-                            }
-                         } else {
-                             // Check if we should jump when blocked
-                             if (movement->isGrounded) {
-                                 // Apply upward velocity for jumping (1 block high)
-                                 movement->velocity.y = 5.0f; // Jump strength
-                                 movement->isGrounded = false;
-                             }
-                             movement->isMoving = false;
-                         }
-                    }
-                    break;
-
-                case our::NPCMovementComponent::MovementType::FOLLOW_PLAYER: {
-                    glm::vec3 toPlayer = playerPos - entity->localTransform.position;
-                    float distToPlayer = glm::length(toPlayer);
-                    if (distToPlayer > 2.0f) {
-                        glm::vec3 moveDir = glm::normalize(toPlayer);
-                        glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
-                        if (isValidNPCPosition(entity, newPos)) {
-                            entity->localTransform.position = newPos;
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    bool isValidNPCPosition(our::Entity* entity, const glm::vec3& newPos) {
-        auto* aabb = entity->getComponent<our::AABBColliderComponent>();
-        if (!aabb) return true;
+    bool isValidNPCPosition(our::Entity *entity, const glm::vec3 &newPos)
+    {
+        auto *aabb = entity->getComponent<our::AABBColliderComponent>();
+        if (!aabb)
+            return true;
 
         glm::vec3 min = aabb->getMinCorner(newPos);
         glm::vec3 max = aabb->getMaxCorner(newPos);
@@ -458,19 +462,29 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         int maxY = static_cast<int>(std::floor(max.y));
         int maxZ = static_cast<int>(std::floor(max.z));
 
-        for (int x = minX; x <= maxX; ++x) {
-            for (int y = minY; y <= maxY; ++y) {
-                for (int z = minZ; z <= maxZ; ++z) {
+        for (int x = minX; x <= maxX; ++x)
+        {
+            for (int y = minY; y <= maxY; ++y)
+            {
+                for (int z = minZ; z <= maxZ; ++z)
+                {
                     int block = terrainWorld.getBlock(x, y, z);
-                    if (block != 0) return false;
+                    if (block != 0)
+                        return false;
                 }
             }
         }
         return true;
     }
 
-    void spawnNPCs() {
-        if (npcTemplates.empty()) return;
+    void spawnNPCs()
+    {
+        printf("[SPAWN] spawnNPCs() called. npcTemplates.size()=%zu\n", npcTemplates.size());
+        if (npcTemplates.empty())
+        {
+            printf("[SPAWN] npcTemplates is EMPTY - returning early\n");
+            return;
+        }
 
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -478,8 +492,10 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         std::uniform_int_distribution<> templateDist(0, (int)npcTemplates.size() - 1);
 
         int numNPCs = npcCountDist(gen);
+        printf("[SPAWN] spawning %d NPCs\n", numNPCs);
 
-        for (int i = 0; i < numNPCs; ++i) {
+        for (int i = 0; i < numNPCs; ++i)
+        {
             int cx = currentCenterChunkX;
             int cz = currentCenterChunkZ;
 
@@ -488,98 +504,164 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
             int ly = terrainWorld.height - 1;
             int lz = localDist(gen);
 
-            while (ly >= 0 && terrainWorld.getBlock(cx * voxel::Chunk::CHUNK_SIZE + lx, ly, cz * voxel::Chunk::CHUNK_SIZE + lz) == 0) {
+            while (ly >= 0 && terrainWorld.getBlock(cx * voxel::Chunk::CHUNK_SIZE + lx, ly, cz * voxel::Chunk::CHUNK_SIZE + lz) == 0)
+            {
                 ly--;
             }
-            if (ly < 0) continue;
+            if (ly < 0)
+                continue;
 
             float worldX = cx * voxel::Chunk::CHUNK_SIZE + lx + 0.5f;
             float worldY = ly + 1.5f;
             float worldZ = cz * voxel::Chunk::CHUNK_SIZE + lz + 0.5f;
 
             // Pick a template
-            const auto& templateData = npcTemplates[templateDist(gen)];
+            const auto &templateData = npcTemplates[templateDist(gen)];
 
-            our::Entity* npcEntity = engineWorld.add();
+            our::Entity *npcEntity = engineWorld.add();
             npcEntity->localTransform.position = glm::vec3(worldX, worldY, worldZ);
             npcEntity->localTransform.scale = glm::vec3(templateData.scaleX, templateData.scaleY, templateData.scaleZ);
 
-            auto* meshRenderer = npcEntity->addComponent<our::MeshRendererComponent>();
+            auto *meshRenderer = npcEntity->addComponent<our::MeshRendererComponent>();
             meshRenderer->mesh = our::AssetLoader<our::Mesh>::get(templateData.meshName);
             meshRenderer->material = our::AssetLoader<our::Material>::get(templateData.matName);
 
-            auto* aabb = npcEntity->addComponent<our::AABBColliderComponent>();
-            aabb->center = glm::vec3(0.0f, 0.9f, 0.0f);
-            aabb->halfSize = glm::vec3(0.4f, 0.9f, 0.4f) * npcEntity->localTransform.scale[1] / 0.1f; // Scale hitboxes if needed
+            auto *aabb = npcEntity->addComponent<our::AABBColliderComponent>();
+            aabb->center = templateData.aabbCenter;
+            aabb->halfSize = templateData.aabbHalfSize;
+            printf("[SPAWN] NPC AABB center=(%.2f,%.2f,%.2f) halfSize=(%.2f,%.2f,%.2f)\n",
+                   aabb->center.x, aabb->center.y, aabb->center.z,
+                   aabb->halfSize.x, aabb->halfSize.y, aabb->halfSize.z);
 
-            auto* movement = npcEntity->addComponent<our::NPCMovementComponent>();
+            auto *movement = npcEntity->addComponent<our::NPCMovementComponent>();
             movement->startPosition = npcEntity->localTransform.position;
             movement->speed = templateData.speed;
             movement->moveRadius = templateData.moveRadius;
             movement->waitTime = templateData.waitTime;
 
-            if (templateData.movementType == "idle") movement->movementType = our::NPCMovementComponent::MovementType::IDLE;
-            else if (templateData.movementType == "patrol") movement->movementType = our::NPCMovementComponent::MovementType::PATROL;
-            else if (templateData.movementType == "follow_player") movement->movementType = our::NPCMovementComponent::MovementType::FOLLOW_PLAYER;
-            else movement->movementType = our::NPCMovementComponent::MovementType::RANDOM_WALK;
+            if (templateData.movementType == "idle")
+                movement->movementType = our::NPCMovementComponent::MovementType::IDLE;
+            else if (templateData.movementType == "patrol")
+                movement->movementType = our::NPCMovementComponent::MovementType::PATROL;
+            else if (templateData.movementType == "follow_player")
+                movement->movementType = our::NPCMovementComponent::MovementType::FOLLOW_PLAYER;
+            else
+                movement->movementType = our::NPCMovementComponent::MovementType::RANDOM_WALK;
 
-            auto* killable = npcEntity->addComponent<our::KillableNPCComponent>();
+            auto *killable = npcEntity->addComponent<our::KillableNPCComponent>();
             killable->foodReward = templateData.foodReward;
             killable->npcType = templateData.npcType;
+            
+            printf("[SPAWN] NPC #%d created at (%.2f, %.2f, %.2f) type=%s movementType=%d\n",
+                   i, worldX, worldY, worldZ, templateData.npcType.c_str(), (int)movement->movementType);
         }
+        printf("[SPAWN] spawnNPCs() complete. Total NPCs in world: %zu\n", engineWorld.getEntities().size());
     }
 
     // --- State Overrides ---
-    void onInitialize() override {
+    void onInitialize() override
+    {
         auto &config = getApp()->getConfig()["scene"];
-        if (config.contains("assets")) our::deserializeAllAssets(config["assets"]);
-        if (config.contains("world")) engineWorld.deserialize(config["world"]);
-        if (config.contains("terrain")) {
-            auto& terrainConfig = config["terrain"];
+        if (config.contains("assets"))
+            our::deserializeAllAssets(config["assets"]);
+        if (config.contains("world"))
+            engineWorld.deserialize(config["world"]);
+        if (config.contains("terrain"))
+        {
+            auto &terrainConfig = config["terrain"];
             terrainWorld.deserialize(terrainConfig);
             chunkLoadRadius = terrainConfig.value("chunk-load-radius", chunkLoadRadius);
             chunkUnloadRadius = std::max(terrainConfig.value("chunk-unload-radius", chunkLoadRadius + 1), chunkLoadRadius);
         }
 
-        if (config.contains("npcTypes") && config["npcTypes"].is_array()) {
-            for (const auto& npcTypeJson : config["npcTypes"]) {
-                if (!npcTypeJson.is_object()) continue;
+        if (config.contains("npcTypes") && config["npcTypes"].is_array())
+        {
+            printf("[INIT] Found npcTypes array with %zu entries\n", config["npcTypes"].size());
+            for (const auto &npcTypeJson : config["npcTypes"])
+            {
+                if (!npcTypeJson.is_object())
+                    continue;
 
                 NPCSpawnData templateData;
                 templateData.meshName = npcTypeJson.value("mesh", "cube");
                 templateData.matName = npcTypeJson.value("material", "default");
-                
-                if (npcTypeJson.contains("scale") && npcTypeJson["scale"].is_array() && npcTypeJson["scale"].size() >= 3) {
+
+                if (npcTypeJson.contains("scale") && npcTypeJson["scale"].is_array() && npcTypeJson["scale"].size() >= 3)
+                {
                     templateData.scaleX = npcTypeJson["scale"][0].get<float>();
                     templateData.scaleY = npcTypeJson["scale"][1].get<float>();
                     templateData.scaleZ = npcTypeJson["scale"][2].get<float>();
-                } else {
+                }
+                else
+                {
                     templateData.scaleX = templateData.scaleY = templateData.scaleZ = 1.0f;
                 }
-                
-                if (npcTypeJson.contains("components") && npcTypeJson["components"].is_object()) {
-                    const auto& comp = npcTypeJson["components"];
+
+                if (npcTypeJson.contains("components") && npcTypeJson["components"].is_object())
+                {
+                    const auto &comp = npcTypeJson["components"];
                     templateData.foodReward = comp.value("foodReward", 1);
                     templateData.npcType = comp.value("npcType", "default");
-                } else {
+
+                    // Read AABB from components if present
+                    if (comp.contains("AABBCollider") && comp["AABBCollider"].is_object())
+                    {
+                        const auto &aabbJson = comp["AABBCollider"];
+                        templateData.aabbCenter = glm::vec3(0.0f);
+                        templateData.aabbHalfSize = glm::vec3(0.4f);
+                        if (aabbJson.contains("center") && aabbJson["center"].is_array() && aabbJson["center"].size() >= 3)
+                        {
+                            templateData.aabbCenter = glm::vec3(
+                                aabbJson["center"][0].get<float>(),
+                                aabbJson["center"][1].get<float>(),
+                                aabbJson["center"][2].get<float>()
+                            );
+                        }
+                        if (aabbJson.contains("halfSize") && aabbJson["halfSize"].is_array() && aabbJson["halfSize"].size() >= 3)
+                        {
+                            templateData.aabbHalfSize = glm::vec3(
+                                aabbJson["halfSize"][0].get<float>(),
+                                aabbJson["halfSize"][1].get<float>(),
+                                aabbJson["halfSize"][2].get<float>()
+                            );
+                        }
+                        printf("[INIT] NPC %s AABB center=(%.2f,%.2f,%.2f) halfSize=(%.2f,%.2f,%.2f)\n",
+                               templateData.npcType.c_str(),
+                               templateData.aabbCenter.x, templateData.aabbCenter.y, templateData.aabbCenter.z,
+                               templateData.aabbHalfSize.x, templateData.aabbHalfSize.y, templateData.aabbHalfSize.z);
+                    }
+                }
+                else
+                {
                     templateData.foodReward = 1;
                     templateData.npcType = "default";
                 }
 
-                if (npcTypeJson.contains("movement") && npcTypeJson["movement"].is_object()) {
-                    const auto& mov = npcTypeJson["movement"];
+                if (npcTypeJson.contains("movement") && npcTypeJson["movement"].is_object())
+                {
+                    const auto &mov = npcTypeJson["movement"];
                     templateData.speed = mov.value("speed", 1.0f);
                     templateData.moveRadius = mov.value("moveRadius", 5.0f);
                     templateData.waitTime = mov.value("waitTime", 2.0f);
                     templateData.movementType = mov.value("movementType", "random_walk");
-                } else {
+                }
+                else
+                {
                     templateData.speed = 1.0f;
                     templateData.moveRadius = 5.0f;
                     templateData.waitTime = 2.0f;
                     templateData.movementType = "random_walk";
                 }
                 npcTemplates.push_back(templateData);
+                printf("[INIT] Added NPC template: mesh=%s type=%s movementType=%s\n",
+                       templateData.meshName.c_str(), templateData.npcType.c_str(), 
+                       templateData.movementType.c_str());
             }
+            printf("[INIT] Finished parsing npcTypes. Total templates: %zu\n", npcTemplates.size());
+        }
+        else
+        {
+            printf("[INIT] No npcTypes found in config\n");
         }
 
         cameraController.enter(getApp());
@@ -588,13 +670,13 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         renderer.initialize(getApp()->getFrameBufferSize(), config["renderer"]);
 
         highlightEntity = engineWorld.add();
-        auto* meshRenderer = highlightEntity->addComponent<our::MeshRendererComponent>();
+        auto *meshRenderer = highlightEntity->addComponent<our::MeshRendererComponent>();
         meshRenderer->mesh = our::AssetLoader<our::Mesh>::get("cube");
         meshRenderer->material = our::AssetLoader<our::Material>::get("highlight-fill");
         highlightEntity->localTransform.scale = glm::vec3(0.502f); // Slightly larger than a block
 
         highlightEdgesEntity = engineWorld.add();
-        auto* edgesRenderer = highlightEdgesEntity->addComponent<our::MeshRendererComponent>();
+        auto *edgesRenderer = highlightEdgesEntity->addComponent<our::MeshRendererComponent>();
         highlightEdgesMesh = our::mesh_utils::cubeEdges();
         edgesRenderer->mesh = highlightEdgesMesh;
         edgesRenderer->material = our::AssetLoader<our::Material>::get("wireframe");
@@ -604,55 +686,77 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         our::AudioSystem::startLoopingSound("water_ambient", "assets/sounds/water_flowing.wav");
         our::AudioSystem::setLoopingSoundVolume("water_ambient", 0.0f);
 
-        our::Entity* playerEntity = findPlayerEntity();
-        if (playerEntity) {
+        our::Entity *playerEntity = findPlayerEntity();
+        if (playerEntity)
+        {
             streamChunksAroundPlayer(playerEntity->localTransform.position);
             // Spawn player on top of terrain
-            auto& pos = playerEntity->localTransform.position;
-            for (int y = terrainWorld.height - 1; y >= 0; --y) {
-                if (terrainWorld.getBlock(pos.x, y, pos.z) != 0) {
-                    pos.y = y + 2.5f; break;
+            auto &pos = playerEntity->localTransform.position;
+            for (int y = terrainWorld.height - 1; y >= 0; --y)
+            {
+                if (terrainWorld.getBlock(pos.x, y, pos.z) != 0)
+                {
+                    pos.y = y + 2.5f;
+                    break;
                 }
             }
         }
-        if (terrainMeshDirty) rebuildMesh();
+        if (terrainMeshDirty)
+            rebuildMesh();
+        
+        // Initialize NPC Movement System with player entity and terrain
+        npcMovementSystem.initialize(playerEntity, &terrainWorld);
+        printf("[INIT] NPCMovementSystem initialized with playerEntity=%p and terrainWorld=%p\n", 
+               (void*)playerEntity, (void*)&terrainWorld);
+        
         spawnNPCs();
-        for (auto entity : engineWorld.getEntities()) {
-            if (!entity) continue;
-            auto* npcMove = entity->getComponent<our::NPCMovementComponent>();
-            if (npcMove) npcMove->startPosition = entity->localTransform.position;
+        for (auto entity : engineWorld.getEntities())
+        {
+            if (!entity)
+                continue;
+            auto *npcMove = entity->getComponent<our::NPCMovementComponent>();
+            if (npcMove)
+                npcMove->startPosition = entity->localTransform.position;
         }
     }
 
-    void onImmediateGui() override {
-        our::Entity* playerEntity = findPlayerEntity();
-        if (!playerEntity) return;
+    void onImmediateGui() override
+    {
+        our::Entity *playerEntity = findPlayerEntity();
+        if (!playerEntity)
+            return;
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-        
+
         // 1. Draw Hotbar
-        our::PlayerComponent* player = playerEntity->getComponent<our::PlayerComponent>();
-        if (player) {
+        our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
+        if (player)
+        {
             ImGuiWindowFlags invFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground;
             constexpr float box = 60.0f, gap = 8.0f, iconSize = 34.0f;
             ImVec2 invSize(kHotbarSlots * box + (kHotbarSlots - 1) * gap + 24.0f, box + 26.0f);
             ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f - invSize.x * 0.5f, displaySize.y - invSize.y - 16.0f), ImGuiCond_Always);
             ImGui::SetNextWindowSize(invSize, ImGuiCond_Always);
-            if (ImGui::Begin("InventoryHotbar", nullptr, invFlags)) {
+            if (ImGui::Begin("InventoryHotbar", nullptr, invFlags))
+            {
                 ImGui::SetCursorPos(ImVec2(12.0f, 12.0f));
                 int counts[] = {player->inventoryGrass, player->inventoryDirt, player->inventoryWood, player->inventoryStone, player->inventorySand};
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                for (int i = 0; i < kHotbarSlots; i++) {
-                    if (i > 0) ImGui::SameLine(0.0f, gap);
+                ImDrawList *dl = ImGui::GetWindowDrawList();
+                for (int i = 0; i < kHotbarSlots; i++)
+                {
+                    if (i > 0)
+                        ImGui::SameLine(0.0f, gap);
                     ImGui::PushID(i);
                     const bool selected = (player->inventoryHotbarSlot == i);
                     ImVec2 p = ImGui::GetCursorScreenPos();
                     ImVec2 br(p.x + box, p.y + box);
                     dl->AddRectFilled(p, br, selected ? IM_COL32(55, 85, 130, 230) : IM_COL32(28, 28, 32, 220), 6.0f);
-                    drawHotbarResourceIcon(dl, i, ImVec2(p.x + (box-iconSize)*0.5f, p.y + 5.0f), ImVec2(p.x + (box+iconSize)*0.5f, p.y + 5.0f + iconSize));
+                    drawHotbarResourceIcon(dl, i, ImVec2(p.x + (box - iconSize) * 0.5f, p.y + 5.0f), ImVec2(p.x + (box + iconSize) * 0.5f, p.y + 5.0f + iconSize));
                     dl->AddRect(p, br, selected ? IM_COL32(240, 200, 90, 255) : IM_COL32(90, 90, 98, 255), 6.0f, ImDrawCornerFlags_All, selected ? 2.5f : 1.0f);
-                    if (ImGui::InvisibleButton("slot", ImVec2(box, box))) player->inventoryHotbarSlot = i;
-                    char cnt[12]; std::snprintf(cnt, sizeof(cnt), "x%d", counts[i]);
+                    if (ImGui::InvisibleButton("slot", ImVec2(box, box)))
+                        player->inventoryHotbarSlot = i;
+                    char cnt[12];
+                    std::snprintf(cnt, sizeof(cnt), "x%d", counts[i]);
                     ImVec2 ts = ImGui::CalcTextSize(cnt);
                     dl->AddText(ImVec2(p.x + (box - ts.x) * 0.5f, p.y + box - ts.y - 4.0f), IM_COL32_WHITE, cnt);
                     ImGui::PopID();
@@ -661,87 +765,100 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
             ImGui::End();
         }
 
-// 2 & 3. Draw Health and Meat Bars in one row, centered
-        our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
-        our::Texture2D* meatTex = our::AssetLoader<our::Texture2D>::get("meats");
-        if (heartsTex && meatTex && player) {
-            ImDrawList* barDl = ImGui::GetForegroundDrawList();
+        // 2 & 3. Draw Health and Meat Bars in one row, centered
+        our::Texture2D *heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
+        our::Texture2D *meatTex = our::AssetLoader<our::Texture2D>::get("meats");
+        if (heartsTex && meatTex && player)
+        {
+            ImDrawList *barDl = ImGui::GetForegroundDrawList();
             float heartSize = 28.0f;
             float heartGap = 2.0f;
             float maxHearts = 10;
             float heartTotalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
-            
+
             float meatSize = 28.0f;
             float meatGap = 2.0f;
             float maxMeat = player->meatMax;
             float meatTotalW = maxMeat * meatSize + (maxMeat - 1) * meatGap;
-            
+
             float barSpacing = 12.0f; // Space between heart and meat bars
             float bothTotalW = heartTotalW + meatTotalW + barSpacing;
-            
+
             float startY = displaySize.y - 60.0f - 26.0f - 16.0f - heartSize - 8.0f; // Position above hotbar
             float startX = displaySize.x * 0.5f - bothTotalW * 0.5f;
-            
+
             // Draw Hearts Bar
             ImTextureID heartsTexID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
             float texW = 45.0f;
-            
+
             int fullHearts = static_cast<int>(player->health / 10.0f);
             float partialHeart = (player->health / 10.0f) - fullHearts;
-            
+
             ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
             ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
             ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
             ImVec2 uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
 
-            for (int i = 0; i < maxHearts; ++i) {
+            for (int i = 0; i < maxHearts; ++i)
+            {
                 ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
                 ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
-                if (i < fullHearts) {
+                if (i < fullHearts)
+                {
                     barDl->AddImage(heartsTexID, pMin, pMax, uvFull0, uvFull1);
-                } else if (i == fullHearts && partialHeart > 0.0f) {
+                }
+                else if (i == fullHearts && partialHeart > 0.0f)
+                {
                     ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
                     ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
                     barDl->AddImage(heartsTexID, pMin, splitX, uvFull0, uvFull1);
                     barDl->AddImage(heartsTexID, splitX1, pMax, uvEmpty0, uvEmpty1);
-                } else {
+                }
+                else
+                {
                     barDl->AddImage(heartsTexID, pMin, pMax, uvEmpty0, uvEmpty1);
                 }
             }
-            
+
             // Draw Meat Bar (starts after hearts with spacing)
             ImTextureID meatTexID = (ImTextureID)(intptr_t)meatTex->getOpenGLName();
-            
+
             ImVec2 mUvFull0((27.0f + 0.5f) / texW, 1.0f);
             ImVec2 mUvFull1((36.0f - 0.5f) / texW, 0.0f);
             ImVec2 mUvEmpty0((0.0f + 0.5f) / texW, 1.0f);
             ImVec2 mUvEmpty1((9.0f - 0.5f) / texW, 0.0f);
 
             float meatStartX = startX + heartTotalW + barSpacing;
-            for (int i = 0; i < maxMeat; ++i) {
+            for (int i = 0; i < maxMeat; ++i)
+            {
                 ImVec2 pMin(meatStartX + i * (meatSize + meatGap), startY);
                 ImVec2 pMax(pMin.x + meatSize, pMin.y + meatSize);
-                if (i < player->meatCount) {
+                if (i < player->meatCount)
+                {
                     barDl->AddImage(meatTexID, pMin, pMax, mUvFull0, mUvFull1);
-                } else {
+                }
+                else
+                {
                     barDl->AddImage(meatTexID, pMin, pMax, mUvEmpty0, mUvEmpty1);
                 }
             }
         }
 
         // 4. Draw Crosshair
-        ImDrawList* drawList = ImGui::GetForegroundDrawList();
+        ImDrawList *drawList = ImGui::GetForegroundDrawList();
         ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
         drawList->AddLine(ImVec2(center.x - 8, center.y), ImVec2(center.x + 8, center.y), IM_COL32(255, 255, 255, 220), 2.0f);
         drawList->AddLine(ImVec2(center.x, center.y - 8), ImVec2(center.x, center.y + 8), IM_COL32(255, 255, 255, 220), 2.0f);
     }
 
-    void onDraw(double deltaTime) override {
+    void onDraw(double deltaTime) override
+    {
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
-        
+
         our::Entity *playerEntity = findPlayerEntity();
-        if (playerEntity) streamChunksAroundPlayer(playerEntity->localTransform.position);
+        if (playerEntity)
+            streamChunksAroundPlayer(playerEntity->localTransform.position);
 
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
@@ -750,28 +867,35 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         blockInteraction.update((float)deltaTime, &engineWorld);
 
         // Handle water damage
-        our::PlayerComponent* player = nullptr;
-        if (playerEntity) {
+        our::PlayerComponent *player = nullptr;
+        if (playerEntity)
+        {
             player = playerEntity->getComponent<our::PlayerComponent>();
         }
-        if (player) {
+        if (player)
+        {
             float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
             our::AudioSystem::setGlobalVolume(targetVolume);
 
-            if (player->isUnderwater) {
+            if (player->isUnderwater)
+            {
                 player->waterDamageTimer += (float)deltaTime;
-                while (player->waterDamageTimer >= player->waterDamageInterval) {
+                while (player->waterDamageTimer >= player->waterDamageInterval)
+                {
                     player->health -= player->waterDamageAmount;
                     player->waterDamageTimer -= player->waterDamageInterval;
-                    
-                    if (player->health <= 0.0f) {
+
+                    if (player->health <= 0.0f)
+                    {
                         player->health = 0.0f;
                         player->isAlive = false;
                         player->gameState = our::GameState::LOSE;
                         break;
                     }
                 }
-            } else if (player->waterDamageTimer > 0.0f) {
+            }
+            else if (player->waterDamageTimer > 0.0f)
+            {
                 player->waterDamageTimer = 0.0f;
             }
 
@@ -787,12 +911,17 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
             int iy = static_cast<int>(std::floor(pos.y));
             int iz = static_cast<int>(std::floor(pos.z));
 
-            for (int dx = -6; dx <= 6; ++dx) {
-                for (int dy = -3; dy <= 3; ++dy) {
-                    for (int dz = -6; dz <= 6; ++dz) {
-                        if (terrainWorld.getBlock(ix + dx, iy + dy, iz + dz) == voxel::WATER) {
-                            float distSq = (float)(dx*dx + dy*dy + dz*dz);
-                            if (distSq < minDistanceSq) {
+            for (int dx = -6; dx <= 6; ++dx)
+            {
+                for (int dy = -3; dy <= 3; ++dy)
+                {
+                    for (int dz = -6; dz <= 6; ++dz)
+                    {
+                        if (terrainWorld.getBlock(ix + dx, iy + dy, iz + dz) == voxel::WATER)
+                        {
+                            float distSq = (float)(dx * dx + dy * dy + dz * dz);
+                            if (distSq < minDistanceSq)
+                            {
                                 minDistanceSq = distSq;
                                 waterFound = true;
                             }
@@ -802,70 +931,97 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
             }
 
             float volume = 0.0f;
-            if (waterFound) {
+            if (waterFound)
+            {
                 float distance = std::sqrt(minDistanceSq);
                 volume = 1.0f - (distance / maxRadius);
-                if (volume < 0.0f) volume = 0.0f;
-            }
-            our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
-        }
-        
-        updateNPCMovement(playerEntity, (float)deltaTime);
-        
+                if (volume < 0.0f)
+                    volume = 0.0f;
+             }
+             our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
+         }
+
+         // Update NPC movement using the dedicated system
+         npcMovementSystem.update(&engineWorld, (float)deltaTime);
+
         auto &mouse = getApp()->getMouse();
-        if (playerEntity) {
+        if (playerEntity)
+        {
             glm::mat4 camMat = playerEntity->localTransform.toMat4();
             glm::vec3 camPos = playerEntity->localTransform.position;
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
-            our::PlayerComponent* player = playerEntity->getComponent<our::PlayerComponent>();
+            our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
 
             // Highlight Hovered Block
             RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
-            if (hoverHit.hit && highlightEntity && highlightEdgesEntity) {
+            if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
+            {
                 glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
                 highlightEntity->localTransform.position = pos;
                 highlightEdgesEntity->localTransform.position = pos;
-            } else {
-                if (highlightEntity) highlightEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
-                if (highlightEdgesEntity) highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+            }
+            else
+            {
+                if (highlightEntity)
+                    highlightEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+                if (highlightEdgesEntity)
+                    highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
             }
 
             // Break Block / Kill NPC (disabled underwater)
-            if (mouse.justPressed(0) && player && !player->isUnderwater) {
-                our::Entity* hitNPC = findHitNPC(camPos, camDir, 5.0f);
-                if (hitNPC) {
+            if (mouse.justPressed(0) && player && !player->isUnderwater)
+            {
+                our::Entity *hitNPC = findHitNPC(camPos, camDir, 5.0f);
+                if (hitNPC)
+                {
                     killNPCAndAwardMeat(hitNPC, player);
                     our::AudioSystem::playSound("assets/sounds/Death.wav");
-                } else {
-                    RayHit hit = terrainWorld.castRay(camPos, camDir);
-                    if (hit.hit) {
-                    int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                    blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
-
-                    if (blockInteraction.currentHits == 0) {
-                        // The block was completely broken
-                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
-
-                        if (player) registerCollectedBlock(player, type);
-                    } else {
-                        // The block was hit but not broken
-                        if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
-                        else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
-                        else if (type == voxel::SAND) our::AudioSystem::playSound("assets/sounds/Sand.wav");
-                        else if (type == voxel::STONE) our::AudioSystem::playSound("assets/sounds/Stone.wav");
-                        else if (type == voxel::Glass) our::AudioSystem::playSound("assets/sounds/Glass.wav");
-                        else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
-                        else our::AudioSystem::playSound("assets/sounds/Hit.wav");
-                    }
                 }
+                else
+                {
+                    RayHit hit = terrainWorld.castRay(camPos, camDir);
+                    if (hit.hit)
+                    {
+                        int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
+                        blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
+
+                        if (blockInteraction.currentHits == 0)
+                        {
+                            // The block was completely broken
+                            our::AudioSystem::playSound("assets/sounds/Hit.wav");
+
+                            if (player)
+                                registerCollectedBlock(player, type);
+                        }
+                        else
+                        {
+                            // The block was hit but not broken
+                            if (type == voxel::GRASS)
+                                our::AudioSystem::playSound("assets/sounds/Grass.wav");
+                            else if (type == voxel::DIRT)
+                                our::AudioSystem::playSound("assets/sounds/Dirt.wav");
+                            else if (type == voxel::SAND)
+                                our::AudioSystem::playSound("assets/sounds/Sand.wav");
+                            else if (type == voxel::STONE)
+                                our::AudioSystem::playSound("assets/sounds/Stone.wav");
+                            else if (type == voxel::Glass)
+                                our::AudioSystem::playSound("assets/sounds/Glass.wav");
+                            else if (type == voxel::WOOD)
+                                our::AudioSystem::playSound("assets/sounds/Wood.wav");
+                            else
+                                our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                        }
+                    }
                 }
             }
             // Place Block (disabled underwater)
-            if (mouse.justPressed(1) && player && !player->isUnderwater) {
+            if (mouse.justPressed(1) && player && !player->isUnderwater)
+            {
                 RayHit hit = terrainWorld.castRay(camPos, camDir);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
-                int* stack = inventoryCountForType(player, placeType);
-                if (hit.hit && stack && *stack > 0) {
+                int *stack = inventoryCountForType(player, placeType);
+                if (hit.hit && stack && *stack > 0)
+                {
                     terrainWorld.placeBlock(hit, placeType);
                     (*stack)--;
                     terrainMeshDirty = true;
@@ -873,31 +1029,40 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
             }
         }
 
-        if (terrainMeshDirty) rebuildMesh();
+        if (terrainMeshDirty)
+            rebuildMesh();
         renderer.render(&engineWorld);
 
         // Delete particles or hit blocks that have expired outside of chunk builds
         engineWorld.deleteMarkedEntities();
 
-        if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) getApp()->changeState("menu");
+        if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE))
+            getApp()->changeState("menu");
     }
 
-    void onKeyEvent(int key, int scancode, int action, int mods) override {
-        if (action != GLFW_PRESS) return;
-        our::Entity* playerEntity = findPlayerEntity();
-        our::PlayerComponent* player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
-        if (!player) return;
-        if (key >= GLFW_KEY_1 && key <= GLFW_KEY_5) player->inventoryHotbarSlot = key - GLFW_KEY_1;
+    void onKeyEvent(int key, int scancode, int action, int mods) override
+    {
+        if (action != GLFW_PRESS)
+            return;
+        our::Entity *playerEntity = findPlayerEntity();
+        our::PlayerComponent *player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+        if (!player)
+            return;
+        if (key >= GLFW_KEY_1 && key <= GLFW_KEY_5)
+            player->inventoryHotbarSlot = key - GLFW_KEY_1;
     }
 
-    void onScrollEvent(double x, double y) override {
-        our::Entity* playerEntity = findPlayerEntity();
-        our::PlayerComponent* player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
-        if (!player || y == 0) return;
+    void onScrollEvent(double x, double y) override
+    {
+        our::Entity *playerEntity = findPlayerEntity();
+        our::PlayerComponent *player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+        if (!player || y == 0)
+            return;
         player->inventoryHotbarSlot = (player->inventoryHotbarSlot + (y > 0 ? -1 : 1) + kHotbarSlots) % kHotbarSlots;
     }
 
-    void onDestroy() override {
+    void onDestroy() override
+    {
         our::AudioSystem::stopLoopingSound("water_ambient");
         clearAllChunkRenderGroups();
         engineWorld.deleteMarkedEntities();
@@ -905,7 +1070,8 @@ void killNPCAndAwardMeat(our::Entity* npcEntity, our::PlayerComponent* player) {
         cameraController.exit();
         playerController.exit();
         engineWorld.clear();
-        if (highlightEdgesMesh) delete highlightEdgesMesh;
+        if (highlightEdgesMesh)
+            delete highlightEdgesMesh;
         our::clearAllAssets();
     }
 };

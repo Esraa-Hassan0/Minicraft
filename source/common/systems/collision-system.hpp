@@ -94,10 +94,12 @@ namespace our {
                     if (player) {
                         velocity = &player->velocity;
                         isGrounded = &player->isGrounded;
-                    } else if (npc) {
-                        velocity = &npc->velocity;
-                        isGrounded = &npc->isGrounded;
                     }
+                    // NPCs manage their own grounding in npcMovementSystem - skip isGrounded here
+                    // else if (npc) {
+                    //     velocity = &npc->velocity;
+                    //     isGrounded = &npc->isGrounded;
+                    // }
 
                     // Update position based on velocity
                     glm::vec3 newPosition = entity->localTransform.position;
@@ -216,7 +218,7 @@ namespace our {
                         if (!collidedVertically && (*isGrounded)) {
                             // Do one more check below to see if we're still on the ground
                             glm::vec3 checkPosition = entity->localTransform.position;
-                            checkPosition.y -= 0.01f; // Small offset below
+                            checkPosition.y -= 0.1f;  // Use larger probe to ensure we detect ground
                             
                             bool stillGrounded = false;
                             
