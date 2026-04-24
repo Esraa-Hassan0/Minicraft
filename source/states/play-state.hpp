@@ -757,7 +757,7 @@ class Playstate : public our::State {
             our::PlayerComponent* player = playerEntity->getComponent<our::PlayerComponent>();
 
             // Highlight Hovered Block
-            RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
+            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
             if (hoverHit.hit && highlightEntity && highlightEdgesEntity) {
                 glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
                 highlightEntity->localTransform.position = pos;
@@ -768,14 +768,16 @@ class Playstate : public our::State {
             }
 
             // Break Block (disabled underwater)
-            if (mouse.justPressed(0) && player && !player->isUnderwater) {
+            if (mouse.isPressed(0) && player && !player->isUnderwater) {
                 if (!tryMeleeAttack(camPos, camDir)) {
-                    RayHit hit = terrainWorld.castRay(camPos, camDir);
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
                     if (hit.hit) {
                         int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                        blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
+                        bool blockBroken = blockInteraction.processHold(
+                            hit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime
+                        );
 
-                        if (blockInteraction.currentHits == 0) {
+                        if (blockBroken) {
                             // The block was completely broken
                             our::AudioSystem::playSound("assets/sounds/Hit.wav");
 
@@ -786,7 +788,7 @@ class Playstate : public our::State {
                                     player->foodCount++;
                                 }
                             }
-                        } else {
+                        } else if (mouse.justPressed(0)) {
                             // The block was hit but not broken
                             if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
                             else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
@@ -799,9 +801,14 @@ class Playstate : public our::State {
                     }
                 }
             }
+            if (mouse.justReleased(0)) {
+                blockInteraction.currentTargetContext = {-1, -1, -1};
+                blockInteraction.accumulatedBreakTime = 0.0f;
+                blockInteraction.particleSpawnTimer = 0.0f;
+            }
             // Place Block (disabled underwater)
             if (mouse.justPressed(1) && player && !player->isUnderwater) {
-                RayHit hit = terrainWorld.castRay(camPos, camDir);
+                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
                 int* stack = inventoryCountForType(player, placeType);
                 if (hit.hit && stack && *stack > 0) {
