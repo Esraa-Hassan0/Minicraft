@@ -37,6 +37,12 @@ namespace our {
         /// Selected slot: 0 Grass, 1 Dirt, 2 Wood, 3 Stone, 4 Sand
         int inventoryHotbarSlot = 0;
         
+        // Meat economy
+        int meatCount = 10;
+        int meatMax = 10;
+        float meatDecayTimer = 0.0f;
+        float meatDecayIntervalSec = 20.0f;
+
         // Movement & Physics
         glm::vec3 velocity = glm::vec3(0.0f);
         float speed = 5.0f; // Movement speed in units/second
@@ -85,6 +91,10 @@ namespace our {
             health = data.value("health", maxHealth);
             
             resourcesRequired = data.value("resourcesRequired", resourcesRequired);
+            
+            meatMax = data.value("meatMax", meatMax);
+            meatCount = data.value("meatCount", meatCount);
+            meatDecayIntervalSec = data.value("meatDecayIntervalSec", meatDecayIntervalSec);
             
             speed = data.value("speed", speed);
             jumpForce = data.value("jumpForce", jumpForce);

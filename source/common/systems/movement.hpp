@@ -21,6 +21,7 @@ namespace our
         void update(World* world, float deltaTime) {
             // For each entity in the world
             for(auto entity : world->getEntities()){
+                if (!entity) continue;
                 // Get the movement component if it exists
                 MovementComponent* movement = entity->getComponent<MovementComponent>();
                 // If the movement component exists

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <iostream>
 
 struct Particle {
     our::Entity* entity;
@@ -19,52 +20,70 @@ class BlockInteractionSystem {
 public:
     glm::ivec3 currentTargetContext = {-1, -1, -1};
     int currentHits = 0;
-    float timeSinceLastHit = 0.0f;
+    float accumulatedBreakTime = 0.0f; 
+    float particleSpawnTimer = 0.0f;
     std::vector<Particle> particles;
     our::World* worldContext = nullptr;
     
-    // Configurable hit durations
-    const float hitTimeout = 1.0f; 
 
     void initialize(our::World* engineWorld) {
     }
 
-    int getMaxHits(int blockType) {
+    float getBreakDuration(int blockType, int toolType = 0) {
+        float break_duration=0.4;
         switch (blockType) {
-            case voxel::GRASS:
-            case voxel::DIRT:
-            case voxel::SAND:  return 4;
-            case voxel::WOOD:  return 6;
-            case voxel::STONE: return 8;
-            case voxel::LEAF:  
-            case voxel::Glass: return 2;
-            default:           return 1;
+            case voxel::SAND:  break_duration= 0.35f; break;  
+            case voxel::LOG:  break_duration= 1.5f; break;
+            case voxel::STONE: break_duration= 7.5; break;
+            case voxel::Diamond: break_duration = 30; break;
+            case voxel::Glass: break_duration= 0.2f; 
         }
+        std::cout<<"breakDuration is"<<break_duration<<"\n";
+        int multiplier = 1;
+        if (toolType == static_cast<int>(voxel::ToolType::WoodenPickaxe)) {
+            if (blockType == voxel::STONE || blockType == voxel::Diamond) multiplier = 2;
+        } else if (toolType == static_cast<int>(voxel::ToolType::StonePickaxe)) {
+            if (blockType == voxel::STONE || blockType == voxel::Diamond) multiplier = 4;
+        } else if (toolType == static_cast<int>(voxel::ToolType::WoodenAxe)) {
+            if (blockType == voxel::WOOD || blockType == voxel::LOG) multiplier = 2;
+        } else if (toolType == static_cast<int>(voxel::ToolType::StoneAxe)) {
+            if (blockType == voxel::WOOD || blockType == voxel::LOG) multiplier = 4;
+        }
+        break_duration /= multiplier;
+                std::cout<<"breakDuration2 is"<<break_duration<<"\n";
+        return break_duration;
     }
 
-    void processClick(const RayHit& hit, int blockType, voxel::World& terrainWorld, our::World* engineWorld, bool& terrainMeshDirty) {
+    bool processHold(const voxel::RayHit& hit, int blockType, voxel::World& terrainWorld, our::World* engineWorld, bool& terrainMeshDirty, float deltaTime) {
         glm::ivec3 hitPos(hit.x, hit.y, hit.z);
+
         if (hitPos != currentTargetContext) {
             currentTargetContext = hitPos;
-            currentHits = 1;
-            timeSinceLastHit = 0.0f;
-        } else {
-            currentHits++;
-            timeSinceLastHit = 0.0f;
+            accumulatedBreakTime = 0.0f;
+            particleSpawnTimer = 0.0f;
         }
 
-        int maxHits = getMaxHits(blockType);
-        if (currentHits >= maxHits) {
-            // Break block
+        accumulatedBreakTime += deltaTime;
+        particleSpawnTimer += deltaTime;
+
+        if (particleSpawnTimer > 0.25f) {
+            spawnParticles(hitPos, blockType, engineWorld, false);
+            particleSpawnTimer = 0.0f;
+        }
+
+        float requiredTime = getBreakDuration(blockType);
+        std::cout<<"blockType is"<<blockType;
+        std::cout<<"requiredTime is"<<requiredTime;
+        if (accumulatedBreakTime >= requiredTime) {
             spawnParticles(hitPos, blockType, engineWorld, true);
             terrainWorld.breakBlock(hit);
             terrainMeshDirty = true;
+            
             currentTargetContext = {-1, -1, -1};
-            currentHits = 0;
-            return;
-        } else {
-            spawnParticles(hitPos, blockType, engineWorld, false);
+            accumulatedBreakTime = 0.0f;
+            return true;
         }
+        return false;
     }
 
     void spawnParticles(const glm::ivec3& pos, int blockType, our::World* engineWorld, bool isBroken) {
@@ -124,15 +143,6 @@ public:
     }
 
     void update(float deltaTime, our::World* engineWorld) {
-        // Reset the broken state if the player stops hitting it for a little bit
-        if (currentTargetContext.x != -1) {
-            timeSinceLastHit += deltaTime;
-            if (timeSinceLastHit > 1.0f) { // 1 second timeout
-                currentTargetContext = {-1, -1, -1};
-                currentHits = 0;
-            }
-        }
-
         // Process existing particles and clean them up when life ends
         for (auto it = particles.begin(); it != particles.end();) {
             it->timeToLive -= deltaTime;

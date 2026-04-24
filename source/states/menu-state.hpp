@@ -13,6 +13,7 @@
 #include <components/camera.hpp>
 #include <asset-loader.hpp>
 #include <voxel/world.hpp>
+#include <voxel/types.hpp>
 #include <components/mesh-renderer.hpp>
 #include <functional>
 #include <array>
@@ -141,6 +142,7 @@ private:
                                 voxel::WATER,
                                 voxel::WOOD,
                                 voxel::LEAF,
+                                voxel::LOG,
                                 voxel::Diamond,
                                 voxel::Glass
                             };

@@ -46,9 +46,18 @@ class PipelineTestState: public our::State {
         // Then we read the camera information to compute the VP matrix
         if(config.contains("camera")){
             if(auto& camera = config["camera"]; camera.is_object()){
-                glm::vec3 eye = camera.value("eye", glm::vec3(0, 0, 0));
-                glm::vec3 center = camera.value("center", glm::vec3(0, 0, -1));
-                glm::vec3 up = camera.value("up", glm::vec3(0, 1, 0));
+                glm::vec3 eye = glm::vec3(0, 0, 0);
+                if(camera.contains("eye") && camera["eye"].is_array() && camera["eye"].size() >= 3) {
+                    eye = glm::vec3(camera["eye"][0], camera["eye"][1], camera["eye"][2]);
+                }
+                glm::vec3 center = glm::vec3(0, 0, -1);
+                if(camera.contains("center") && camera["center"].is_array() && camera["center"].size() >= 3) {
+                    center = glm::vec3(camera["center"][0], camera["center"][1], camera["center"][2]);
+                }
+                glm::vec3 up = glm::vec3(0, 1, 0);
+                if(camera.contains("up") && camera["up"].is_array() && camera["up"].size() >= 3) {
+                    up = glm::vec3(camera["up"][0], camera["up"][1], camera["up"][2]);
+                }
                 glm::mat4 V = glm::lookAt(eye, center, up);
 
                 float fov = glm::radians(camera.value("fov", 90.0f));
@@ -67,7 +76,10 @@ class PipelineTestState: public our::State {
             pipeline.deserialize(config["pipeline"]);
         }
         // We also read the clear color and depth since we may want to change it
-        glm::vec4 clearColor = config.value("clearColor", glm::vec4(0, 0, 0, 0));
+        glm::vec4 clearColor = glm::vec4(0, 0, 0, 0);
+        if(config.contains("clearColor") && config["clearColor"].is_array() && config["clearColor"].size() >= 4) {
+            clearColor = glm::vec4(config["clearColor"][0], config["clearColor"][1], config["clearColor"][2], config["clearColor"][3]);
+        }
         glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
         glClearDepth(config.value("clearDepth", 1.0f));
     }

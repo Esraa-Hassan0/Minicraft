@@ -40,6 +40,7 @@ namespace our {
             CameraComponent* camera = nullptr;
 
             for (auto entity : world->getEntities()) {
+                if (!entity) continue;
                 PlayerComponent* p = entity->getComponent<PlayerComponent>();
                 if (p) {
                     player = p;
