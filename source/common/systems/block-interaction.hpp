@@ -18,6 +18,11 @@ struct Particle {
 
 class BlockInteractionSystem {
 public:
+    enum class HoldResult {
+        None,
+        HitPulse,
+        Broken
+    };
     glm::ivec3 currentTargetContext = {-1, -1, -1};
     int currentHits = 0;
     float accumulatedBreakTime = 0.0f; 
@@ -54,7 +59,7 @@ public:
         return break_duration;
     }
 
-    bool processHold(const voxel::RayHit& hit, int blockType, voxel::World& terrainWorld, our::World* engineWorld, bool& terrainMeshDirty, float deltaTime) {
+    HoldResult processHold(const voxel::RayHit& hit, int blockType, voxel::World& terrainWorld, our::World* engineWorld, bool& terrainMeshDirty, float deltaTime) {
         glm::ivec3 hitPos(hit.x, hit.y, hit.z);
 
         if (hitPos != currentTargetContext) {
@@ -65,15 +70,17 @@ public:
 
         accumulatedBreakTime += deltaTime;
         particleSpawnTimer += deltaTime;
+        
+        HoldResult result = HoldResult::None;
 
         if (particleSpawnTimer > 0.25f) {
             spawnParticles(hitPos, blockType, engineWorld, false);
             particleSpawnTimer = 0.0f;
+            result = HoldResult::HitPulse;
         }
 
         float requiredTime = getBreakDuration(blockType);
-        std::cout<<"blockType is"<<blockType;
-        std::cout<<"requiredTime is"<<requiredTime;
+        
         if (accumulatedBreakTime >= requiredTime) {
             spawnParticles(hitPos, blockType, engineWorld, true);
             terrainWorld.breakBlock(hit);
@@ -81,9 +88,9 @@ public:
             
             currentTargetContext = {-1, -1, -1};
             accumulatedBreakTime = 0.0f;
-            return true;
+            return HoldResult::Broken;
         }
-        return false;
+        return result;
     }
 
     void spawnParticles(const glm::ivec3& pos, int blockType, our::World* engineWorld, bool isBroken) {

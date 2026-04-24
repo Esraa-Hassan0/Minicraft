@@ -11,6 +11,7 @@
 #include "light.hpp"
 #include "killable-npc.hpp"
 #include "npc-movement.hpp"
+#include "hand.hpp"
 
 namespace our
 {
@@ -58,6 +59,10 @@ namespace our
         else if (type == NPCMovementComponent::getID())
         {
             component = entity->addComponent<NPCMovementComponent>();
+        }
+        else if (type == HandComponent::getID())
+        {
+            component = entity->addComponent<HandComponent>();
         }
         if (component)
             component->deserialize(data);
