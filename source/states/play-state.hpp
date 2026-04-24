@@ -85,7 +85,9 @@ class Playstate : public our::State
 
     // --- Inventory & Hotbar Helpers ---
     static constexpr int kHotbarSlots = 5;
+    bool isInventoryOpen = false;
 
+    
     static int hotbarBlockType(int slot)
     {
         static const int types[kHotbarSlots] = {
@@ -162,6 +164,10 @@ class Playstate : public our::State
             return our::AssetLoader<our::Material>::get("water");
         case voxel::WOOD:
             return our::AssetLoader<our::Material>::get("wood");
+        case voxel::LOG:
+            return our::AssetLoader<our::Material>::get("log");
+        case voxel::LEAF:
+            return our::AssetLoader<our::Material>::get("leaf");
         default:
             return our::AssetLoader<our::Material>::get("default");
         }
@@ -196,7 +202,7 @@ class Playstate : public our::State
     {
         ChunkRenderGroup renderGroup;
         const int meshBlockTypes[] = {
-            voxel::STONE, voxel::DIRT, voxel::SAND,
+            voxel::STONE, voxel::DIRT, voxel::SAND, voxel::LOG,
             voxel::WATER, voxel::WOOD, voxel::LEAF, voxel::Diamond, voxel::Glass};
 
         glm::vec3 chunkOrigin(chunk.chunkX * voxel::Chunk::CHUNK_SIZE, 0.0f, chunk.chunkZ * voxel::Chunk::CHUNK_SIZE);
@@ -727,7 +733,81 @@ class Playstate : public our::State
             return;
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+        // Draw inventory
+        if (isInventoryOpen) {
+            ImVec2 windowSize(400, 360);
+            ImGui::SetNextWindowPos(ImVec2((displaySize.x - windowSize.x) * 0.5f, (displaySize.y - windowSize.y) * 0.5f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
 
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.76f, 0.76f, 0.76f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+
+            ImGui::Begin("Inventory", &isInventoryOpen, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+
+            // ==========================================
+            // 1. Crafting Section (2x2 + Output)
+            // ==========================================
+            ImGui::SetCursorPos(ImVec2(180, 20)); 
+            ImGui::BeginGroup();
+            ImGui::Text("Crafting");
+            for (int r = 0; r < 2; r++) {
+                for (int c = 0; c < 2; c++) {
+                    ImGui::Button(("##craft" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
+                    if (c < 1) ImGui::SameLine();
+                }
+            }
+            ImGui::EndGroup();
+
+            ImGui::SameLine(0, 15);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 25);
+            ImGui::Text("->");
+            ImGui::SameLine(0, 15);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 10);
+            ImGui::Button("##craft_out", ImVec2(45, 45));
+
+            ImGui::Spacing();
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // ==========================================
+            // 2. Main Inventory Section (3x9)
+            // ==========================================
+            ImGui::SetCursorPosX(16); 
+            ImGui::Text("Inventory");
+            
+            ImGui::SetCursorPosX(16);
+            for (int r = 0; r < 3; r++) {
+                for (int c = 0; c < 9; c++) {
+                    ImGui::Button(("##inv" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
+                    if (c < 8) ImGui::SameLine();
+                }
+                if (r < 2) ImGui::SetCursorPosX(16);
+            }
+
+            ImGui::Spacing();
+            ImGui::Spacing();
+
+            // ==========================================
+            // 3. Hotbar Section (1x9)
+            // ==========================================
+            ImGui::SetCursorPosX(16);
+            for (int c = 0; c < 9; c++) {
+                ImGui::Button(("##hotbar_inv" + std::to_string(c)).c_str(), ImVec2(36, 36));
+                if (c < 8) ImGui::SameLine();
+            }
+
+            ImGui::End();
+            
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
+        } else {
+            ImDrawList *drawList = ImGui::GetForegroundDrawList();
+            ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+        }
+    
         // 1. Draw Hotbar
         our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
         if (player)
@@ -865,6 +945,17 @@ class Playstate : public our::State
         timeSystem.update(&engineWorld, (float)deltaTime);
 
         blockInteraction.update((float)deltaTime, &engineWorld);
+        auto &keyboard = getApp()->getKeyboard();
+        // inventory system
+        if (keyboard.justPressed(GLFW_KEY_E)) {
+            isInventoryOpen = !isInventoryOpen;
+            if (isInventoryOpen) {
+                cameraController.exit(); 
+            } else {
+                cameraController.enter(getApp()); 
+            }
+        }
+
 
         // Handle water damage
         our::PlayerComponent *player = nullptr;
@@ -953,7 +1044,7 @@ class Playstate : public our::State
             our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
 
             // Highlight Hovered Block
-            RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
+            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
             if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
             {
                 glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
@@ -977,24 +1068,26 @@ class Playstate : public our::State
                     killNPCAndAwardMeat(hitNPC, player);
                     our::AudioSystem::playSound("assets/sounds/Death.wav");
                 }
-                else
-                {
-                    RayHit hit = terrainWorld.castRay(camPos, camDir);
+            }
+                if(mouse.isPressed(0)){
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
                     if (hit.hit)
+                { 
+                    float timer = 0;
+                    int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
+                    bool broken = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty,(float)deltaTime);
+                if (broken)
                     {
-                        int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                        blockInteraction.processClick(hit, type, terrainWorld, &engineWorld, terrainMeshDirty);
-
-                        if (blockInteraction.currentHits == 0)
-                        {
-                            // The block was completely broken
-                            our::AudioSystem::playSound("assets/sounds/Hit.wav");
-
-                            if (player)
-                                registerCollectedBlock(player, type);
-                        }
-                        else
-                        {
+                       // The block was completely broken
+                       our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                          if (player)
+                            registerCollectedBlock(player, type);
+                    }
+                    else
+                    {
+                            timer += (float)deltaTime;
+                            if(timer>=0.3f){
+                                timer=0;
                             // The block was hit but not broken
                             if (type == voxel::GRASS)
                                 our::AudioSystem::playSound("assets/sounds/Grass.wav");
@@ -1006,18 +1099,24 @@ class Playstate : public our::State
                                 our::AudioSystem::playSound("assets/sounds/Stone.wav");
                             else if (type == voxel::Glass)
                                 our::AudioSystem::playSound("assets/sounds/Glass.wav");
-                            else if (type == voxel::WOOD)
+                            else if (type == voxel::WOOD || type == voxel::LOG)
                                 our::AudioSystem::playSound("assets/sounds/Wood.wav");
                             else
                                 our::AudioSystem::playSound("assets/sounds/Hit.wav");
-                        }
+                            }
                     }
                 }
             }
+            else if (mouse.justReleased(0)) 
+            {
+                blockInteraction.currentTargetContext = {-1, -1, -1};
+                blockInteraction.accumulatedBreakTime = 0.0f;
+            }
+            
             // Place Block (disabled underwater)
             if (mouse.justPressed(1) && player && !player->isUnderwater)
             {
-                RayHit hit = terrainWorld.castRay(camPos, camDir);
+                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
                 int *stack = inventoryCountForType(player, placeType);
                 if (hit.hit && stack && *stack > 0)
@@ -1035,8 +1134,11 @@ class Playstate : public our::State
 
         // Delete particles or hit blocks that have expired outside of chunk builds
         engineWorld.deleteMarkedEntities();
-
-        if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE))
+        if (isInventoryOpen) {
+            renderer.render(&engineWorld);
+            return; // Exit early!
+        }
+        if (keyboard.justPressed(GLFW_KEY_ESCAPE))
             getApp()->changeState("menu");
     }
 

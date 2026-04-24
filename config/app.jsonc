@@ -49,7 +49,9 @@
                 "meats": "assets/textures/meat_rbg.png",
                 "pig": "assets/textures/pig.png",
                 "chicken": "assets/textures/chicken.png",
-                "horse": "assets/textures/horse.png"
+                "horse": "assets/textures/horse.png",
+                "log": "assets/texture/log.png",
+                "leaf": "assets/texture/leaf.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
@@ -349,6 +351,34 @@
                         1.0
                     ],
                     "texture": "stone",
+                    "sampler": "pixelated"
+                },
+                "log":{
+                    "type":"tinted",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "log",
+                    "sampler": "default"
+                },
+                "leaf":{
+                    "type":"tinted",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "texture": "leaf",
                     "sampler": "pixelated"
                 },
                 "water": {

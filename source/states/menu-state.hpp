@@ -136,6 +136,7 @@ class Menustate: public our::State {
                                 voxel::WATER,
                                 voxel::WOOD,
                                 voxel::LEAF,
+                                voxel::LOG,
                                 voxel::Diamond,
                                 voxel::Glass
                             };

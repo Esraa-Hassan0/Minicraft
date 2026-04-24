@@ -117,6 +117,61 @@ namespace voxel
                  }
             }
         }
+        // ==========================================
+        // --- 2. Tree Generation Pass ---
+        // ==========================================
+        if (chunkType == ChunkType::Grass)
+        {
+            std::mt19937 treeRng(chunkX * 73856 + chunkZ * 19349); 
+            std::uniform_int_distribution<int> chanceDist(0, 100);
+
+            for (int z = 2; z < CHUNK_SIZE - 2; z += 3)
+            {
+                for (int x = 2; x < CHUNK_SIZE - 2; x += 3)
+                {
+                    if (chanceDist(treeRng) < 5) 
+                    {
+                        int surfaceY = -1;
+                        for (int y = height - 1; y >= 0; --y)
+                        {
+                            if (getBlock(x, y, z) == GRASS) {
+                                surfaceY = y;
+                                break;
+                            }
+                        }
+
+                        if (surfaceY != -1 && surfaceY < height - 10) 
+                        {
+                            int treeHeight = 4 + (chanceDist(treeRng) % 3); 
+
+                            for (int y = 1; y <= treeHeight; ++y) {
+                                setBlock(x, surfaceY + y, z, LOG);
+                            }
+
+                            int leafCenterY = surfaceY + treeHeight;
+                            for (int ly = leafCenterY - 2; ly <= leafCenterY + 1; ++ly)
+                            {
+                                int radius = (ly == leafCenterY + 1) ? 1 : 2;
+                                
+                                for (int lx = x - radius; lx <= x + radius; ++lx)
+                                {
+                                    for (int lz = z - radius; lz <= z + radius; ++lz)
+                                    {
+                                        if (std::abs(lx - x) == radius && std::abs(lz - z) == radius && chanceDist(treeRng) < 50) {
+                                            continue; 
+                                        }
+
+                                        if (getBlock(lx, ly, lz) == AIR) {
+                                            setBlock(lx, ly, lz, LEAF);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // 2. ADD VERTICAL LIGHT PROPAGATION

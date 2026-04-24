@@ -5,13 +5,13 @@
 #include <glm/glm.hpp>
 #include <json/json.hpp>
 
-struct RayHit {
-    bool hit = false;
-    int x, y, z;          // The block that was hit (to break it)
-    int prevX, prevY, prevZ; // The empty space right before the hit (to place a block)
-};
 
 namespace voxel {
+    struct RayHit {
+        bool hit = false;
+        int x, y, z;          // The block that was hit (to break it)
+        int prevX, prevY, prevZ; // The empty space right before the hit (to place a block)
+    };
 
 class World {
 public:
