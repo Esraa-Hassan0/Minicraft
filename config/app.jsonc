@@ -51,12 +51,14 @@
                 "chicken": "assets/textures/chicken.png",
                 "horse": "assets/textures/horse.png",
                 "log": "assets/texture/log.png",
-                "leaf": "assets/texture/leaf.png"
+                "leaf": "assets/texture/leaf.png",
+                "hand": "assets/textures/right_hand.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
                 "monkey": "assets/models/monkey.obj",
                 "plane": "assets/models/plane.obj",
+                "rightHand": "assets/models/Rectangle.obj",
                 "sphere": "assets/models/sphere.obj",
                 "cow": "assets/models/cow.obj",
                 "pig": "assets/models/pig.obj",
@@ -712,6 +714,29 @@
                         0.0
                     ],
                     "shininess": 1.0
+                },
+                "hand-material": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        },
+                        "blending": {
+                            "enabled": true,
+                            "sourceFactor": "GL_SRC_ALPHA",
+                            "destinationFactor": "GL_ONE_MINUS_SRC_ALPHA"
+                        }
+                    },
+                    "transparent": true,
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "texture": "hand",
+                    "sampler": "default",
+                    "specular": [0.1, 0.1, 0.1],
+                    "shininess": 4.0
                 }
             }
         },
@@ -851,6 +876,29 @@
                             0,
                             -0.9,
                             0
+                        ]
+                    }
+                ],
+                "children": [
+                    {
+                        "name": "player_hand",
+                        "position": [ 0.38, -0.38, -0.6 ],
+                        "rotation": [ 110, -15, -20 ],
+                        "scale": [ 1.0, 1.0, 1.0 ],
+                        "components": [
+                            {
+                                "type": "Mesh Renderer",
+                                "mesh": "rightHand",
+                                "material": "hand-material"
+                            },
+                            {
+                                "type": "Hand",
+                                "basePosition": [ 0.38, -0.5, -2.0 ],
+                                "baseRotation": [ 110, -15, -20 ],
+                                "interactionRange": 2.0,
+                                "idleSwayAmplitude": 0.01,
+                                "hitForwardThrust": 0.15
+                            }
                         ]
                     }
                 ]

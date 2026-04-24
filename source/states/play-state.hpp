@@ -12,6 +12,7 @@
 #include <systems/time-system.hpp>
 #include <systems/block-interaction.hpp>
 #include <systems/npc-movement-system.hpp>
+#include <systems/hand-system.hpp>
 #include <asset-loader.hpp>
 #include <texture/texture2d.hpp>
 #include <voxel/world.hpp>
@@ -19,6 +20,7 @@
 #include <components/player.hpp>
 #include <components/killable-npc.hpp>
 #include <components/npc-movement.hpp>
+#include <components/hand.hpp>
 #include <audio/audio.hpp>
 #include <unordered_map>
 #include <vector>
@@ -74,6 +76,11 @@ class Playstate : public our::State
      our::Entity *highlightEdgesEntity = nullptr; // Clean square borders
      our::Mesh *highlightEdgesMesh = nullptr;     // Line-based mesh for borders
      BlockInteractionSystem blockInteraction;
+
+    // Hand Animation State
+    float handAnimTime = 0.0f;
+    float hitAnimTime = 0.0f;
+    bool isHitting = false;
 
     // Chunk Streaming State
     int chunkLoadRadius = 2;
@@ -1145,8 +1152,14 @@ class Playstate : public our::State
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
             our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
 
+            // Hand Animation Logic
+            bool triggerHitPulse = false;
+            if (mouse.justPressed(0) || mouse.justPressed(1)) {
+                triggerHitPulse = true;
+            }
+
             // Highlight Hovered Block
-            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
+            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, 2.0f);
             if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
             {
                 glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
@@ -1164,7 +1177,7 @@ class Playstate : public our::State
             // Break Block / Kill NPC (disabled underwater)
             if (mouse.justPressed(0) && player && !player->isUnderwater)
             {
-                our::Entity *hitNPC = findHitNPC(camPos, camDir, 5.0f);
+                our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f);
                 if (hitNPC)
                 {
                     killNPCAndAwardMeat(hitNPC, player);
@@ -1172,24 +1185,21 @@ class Playstate : public our::State
                 }
             }
                 if(mouse.isPressed(0)){
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
                     if (hit.hit)
                 { 
-                    float timer = 0;
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                    bool broken = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty,(float)deltaTime);
-                if (broken)
+                    auto holdResult = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty,(float)deltaTime);
+                    if (holdResult == BlockInteractionSystem::HoldResult::Broken)
                     {
                        // The block was completely broken
                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
                           if (player)
                             registerCollectedBlock(player, type);
                     }
-                    else
+                    else if (holdResult == BlockInteractionSystem::HoldResult::HitPulse)
                     {
-                            timer += (float)deltaTime;
-                            if(timer>=0.3f){
-                                timer=0;
+                            triggerHitPulse = true;
                             // The block was hit but not broken
                             if (type == voxel::GRASS)
                                 our::AudioSystem::playSound("assets/sounds/Grass.wav");
@@ -1205,7 +1215,6 @@ class Playstate : public our::State
                                 our::AudioSystem::playSound("assets/sounds/Wood.wav");
                             else
                                 our::AudioSystem::playSound("assets/sounds/Hit.wav");
-                            }
                     }
                 }
             }
@@ -1215,10 +1224,9 @@ class Playstate : public our::State
                 blockInteraction.accumulatedBreakTime = 0.0f;
             }
             
-            // Place Block (disabled underwater)
             if (mouse.justPressed(1) && player && !player->isUnderwater)
             {
-                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
+                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
                 int placeType = hotbarBlockType(player->inventoryHotbarSlot);
                 int *stack = inventoryCountForType(player, placeType);
                 if (hit.hit && stack && *stack > 0)
@@ -1227,6 +1235,75 @@ class Playstate : public our::State
                     (*stack)--;
                     terrainMeshDirty = true;
                 }
+            }
+
+            // Hand Animation & Interaction Update
+            our::Entity *handEntity = nullptr;
+            our::HandComponent *handComp = nullptr;
+            
+            static bool handFoundOnce = false;
+            static bool shownEntities = false;
+            
+            if (!shownEntities) {
+                std::cout << "DEBUG: All entities in world:\n";
+                for(auto entity : engineWorld.getEntities()){
+                    if (entity) {
+                        std::cout << "  - Name: '" << entity->name << "' Parent: " << (entity->parent ? entity->parent->name : "none") << "\n";
+                    }
+                }
+                shownEntities = true;
+            }
+            
+            for(auto entity : engineWorld.getEntities()){
+                if(entity && entity->name == "player_hand") {
+                    handEntity = entity;
+                    handEntity->localTransform.scale = glm::vec3(0.15f, 0.2f, 0.1f);
+                    handComp = entity->getComponent<our::HandComponent>();
+                    if (!handFoundOnce) {
+                        std::cout << "DEBUG: Hand entity found!\n";
+                        std::cout << "  Has HandComponent: " << (handComp != nullptr ? "YES" : "NO") << "\n";
+                        std::cout << "  Has MeshRenderer: " << (entity->getComponent<our::MeshRendererComponent>() != nullptr ? "YES" : "NO") << "\n";
+                        std::cout << "  Local Position: " << entity->localTransform.position.x << ", " << entity->localTransform.position.y << ", " << entity->localTransform.position.z << "\n";
+                        handFoundOnce = true;
+                    }
+                    break;
+                }
+            }
+
+            if (handEntity && handComp) {
+                std::cout << "DEBUG: About to update hand. Position before: " << handEntity->localTransform.position.x << ", " << handEntity->localTransform.position.y << ", " << handEntity->localTransform.position.z << "\n";
+                
+                // Detect targets within interaction range
+                float interactRange = handComp->interactionRange;
+                voxel::RayHit localHoverHit = terrainWorld.castRay(camPos, camDir, interactRange);
+                our::Entity *localHoverNPC = findHitNPC(camPos, camDir, interactRange);
+
+                bool targetInRange = false;
+                glm::vec3 targetPos(0.0f);
+
+                if (localHoverNPC) {
+                    targetInRange = true;
+                    targetPos = localHoverNPC->localTransform.position;
+                } else if (localHoverHit.hit) {
+                    targetInRange = true;
+                    targetPos = glm::vec3(localHoverHit.x + 0.5f, localHoverHit.y + 0.5f, localHoverHit.z + 0.5f);
+                }
+
+                // Update hand animation using HandSystem
+                our::HandSystem::update(
+                    handEntity,
+                    handComp,
+                    camPos,
+                    camDir,
+                    camMat,
+                    deltaTime,
+                    triggerHitPulse,            // Currently hitting
+                    targetInRange,              // Target in range
+                    targetPos,                  // Target position
+                    &terrainWorld               // Terrain for collision avoidance
+                );
+            } else {
+                std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void*)handEntity << " handComp=" << (void*)handComp << "\n";
             }
         }
 
