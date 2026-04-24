@@ -8,9 +8,18 @@ enum block_types{
     STONE = 3,
     SAND = 4,
     WATER = 5,
-    WOOD = 6,
-    LEAF = 7,
-    Diamond = 8,
+    LOG = 6,
+    WOOD = 7,
+    LEAF = 8,
+    Diamond = 9,
     Glass = 10
+};
+
+enum ToolType {
+        Hand = 0,        
+        WoodenAxe,       
+        StoneAxe,         
+        WoodenPickaxe,   
+        StonePickaxe      
 };
 }
