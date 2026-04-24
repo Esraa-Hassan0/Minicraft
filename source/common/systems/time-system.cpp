@@ -48,9 +48,14 @@ namespace our
 
     void TimeSystem::update(World *world, float deltaTime)
     {
+        float oldTime = currentTime;
         currentTime += deltaTime / dayDuration;
         if (currentTime >= 1.0f)
+        {
             currentTime -= 1.0f;
+            if (oldTime < 1.0f)
+                daysPassed++;
+        }
 
         float elevation = getSunElevation();
         updateSunPosition(currentTime);
