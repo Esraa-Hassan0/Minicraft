@@ -66,6 +66,11 @@ namespace our {
         // Game outcome
         GameState gameState = GameState::PLAYING;
 
+        // XP Leveling System
+        int level = 1;
+        float currentXP = 0.0f;
+        int daysSurvived = 0;
+
         static std::string getID() { return "PlayerComponent"; }
         
         void deserialize(const nlohmann::json& data) override {

@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 class Playstate : public our::State
 {
@@ -87,6 +88,10 @@ class Playstate : public our::State
     static constexpr int kHotbarSlots = 5;
     bool isInventoryOpen = false;
 
+    // Level up notification
+    float levelUpNotificationTime = 0.0f;
+    int displayedLevel = 1;
+
     
     static int hotbarBlockType(int slot)
     {
@@ -116,6 +121,16 @@ class Playstate : public our::State
 
     void registerCollectedBlock(our::PlayerComponent *player, int blockType)
     {
+        // Level 3: Collecting Diamond fills XP to complete leveling
+        if (player && player->level == 3 && blockType == voxel::Diamond)
+        {
+            player->currentXP = 1.0f;
+            player->level = 4;
+            levelUpNotificationTime = 3.0f;
+            displayedLevel = 4;
+            our::AudioSystem::playSound("assets/sounds/levelup.wav");
+        }
+
         int *slot = inventoryCountForType(player, blockType);
         if (slot)
         {
@@ -387,6 +402,20 @@ class Playstate : public our::State
             {
                 // Original behavior for other NPCs (increase meat count)
                 player->meatCount += killable->foodReward;
+
+                // Level 2: Add 1/4 XP per enemy killed
+                if (player->level == 2)
+                {
+                    player->currentXP += 1.0f / 4.0f;
+                    if (player->currentXP >= 1.0f)
+                    {
+                        player->level = 3;
+                        player->currentXP = 0.0f;
+                        levelUpNotificationTime = 3.0f;
+                        displayedLevel = 3;
+                        our::AudioSystem::playSound("assets/sounds/levelup.wav");
+                    }
+                }
             }
         }
         engineWorld.markForRemoval(npcEntity);
@@ -929,6 +958,53 @@ class Playstate : public our::State
         ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
         drawList->AddLine(ImVec2(center.x - 8, center.y), ImVec2(center.x + 8, center.y), IM_COL32(255, 255, 255, 220), 2.0f);
         drawList->AddLine(ImVec2(center.x, center.y - 8), ImVec2(center.x, center.y + 8), IM_COL32(255, 255, 255, 220), 2.0f);
+
+        // 5. Draw XP Bar (top right)
+        if (player)
+        {
+            float xpBarWidth = 200.0f;
+            float xpBarHeight = 16.0f;
+            float xpBarX = displaySize.x - xpBarWidth - 16.0f;
+            float xpBarY = 16.0f;
+
+            float xpProgress = player->currentXP;
+            if (xpProgress > 1.0f) xpProgress = 1.0f;
+
+            ImU32 bgColor = IM_COL32(30, 30, 35, 220);
+            ImU32 fillColor = IM_COL32(100, 200, 255, 255);
+            if (player->level == 3)
+                fillColor = IM_COL32(0, 200, 150, 255);
+
+            drawList->AddRectFilled(ImVec2(xpBarX, xpBarY), ImVec2(xpBarX + xpBarWidth, xpBarY + xpBarHeight), bgColor, 4.0f);
+            drawList->AddRectFilled(ImVec2(xpBarX, xpBarY), ImVec2(xpBarX + xpBarWidth * xpProgress, xpBarY + xpBarHeight), fillColor, 4.0f);
+            drawList->AddRect(ImVec2(xpBarX, xpBarY), ImVec2(xpBarX + xpBarWidth, xpBarY + xpBarHeight), IM_COL32(180, 180, 190, 255), 4.0f, ImDrawCornerFlags_All, 1.5f);
+
+            char levelText[32];
+            std::snprintf(levelText, sizeof(levelText), "Lv.%d", player->level);
+            ImVec2 textSize = ImGui::CalcTextSize(levelText);
+            drawList->AddText(ImVec2(xpBarX + xpBarWidth * 0.5f - textSize.x * 0.5f, xpBarY + xpBarHeight * 0.5f - textSize.y * 0.5f), IM_COL32_WHITE, levelText);
+        }
+
+        // Level Up Notification
+        if (levelUpNotificationTime > 0.0f)
+        {
+            char levelUpText[64];
+            std::snprintf(levelUpText, sizeof(levelUpText), "LEVEL UP! Lv.%d", displayedLevel);
+            ImFont* font = ImGui::GetIO().FontDefault;
+            float baseSize = font ? font->FontSize : 24.0f;
+            float scale = 2.5f;
+            float pulse = 1.0f + 0.1f * std::sin(levelUpNotificationTime * 8.0f);
+            float fontSize = baseSize * scale * pulse;
+            
+            ImVec2 textPos = ImVec2(
+                (displaySize.x - 280.0f * pulse) * 0.5f,
+                (displaySize.y - 60.0f * pulse) * 0.5f
+            );
+            
+            drawList->AddText(font, fontSize, ImVec2(textPos.x - 1, textPos.y - 1), IM_COL32(0, 80, 40, 255), levelUpText);
+            drawList->AddText(font, fontSize, ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 80, 40, 255), levelUpText);
+            drawList->AddText(font, fontSize, textPos, IM_COL32(50, 255, 100, 255), levelUpText);
+        }
     }
 
     void onDraw(double deltaTime) override
@@ -944,6 +1020,37 @@ class Playstate : public our::State
         lightSystem.update(&engineWorld, (float)deltaTime);
         timeSystem.update(&engineWorld, (float)deltaTime);
 
+        our::PlayerComponent *player = nullptr;
+        if (playerEntity)
+        {
+            player = playerEntity->getComponent<our::PlayerComponent>();
+        }
+
+        // Update level up notification timer
+        if (levelUpNotificationTime > 0.0f)
+            levelUpNotificationTime -= (float)deltaTime;
+
+        // Level 1: XP increases by 1/3 every day
+        if (player && player->level == 1)
+        {
+            int daysPassed = timeSystem.getDaysPassed();
+            if (daysPassed > player->daysSurvived)
+            {
+                int daysDiff = daysPassed - player->daysSurvived;
+                player->daysSurvived = daysPassed;
+                player->currentXP += daysDiff * (1.0f / 3.0f);
+                if (player->currentXP >= 1.0f)
+                {
+                    player->currentXP = 1.0f;
+                    player->level = 2;
+                    player->currentXP = 0.0f;
+                    levelUpNotificationTime = 3.0f;
+                    displayedLevel = 2;
+                    our::AudioSystem::playSound("assets/sounds/levelup.wav");
+                }
+            }
+        }
+
         blockInteraction.update((float)deltaTime, &engineWorld);
         auto &keyboard = getApp()->getKeyboard();
         // inventory system
@@ -958,11 +1065,6 @@ class Playstate : public our::State
 
 
         // Handle water damage
-        our::PlayerComponent *player = nullptr;
-        if (playerEntity)
-        {
-            player = playerEntity->getComponent<our::PlayerComponent>();
-        }
         if (player)
         {
             float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
