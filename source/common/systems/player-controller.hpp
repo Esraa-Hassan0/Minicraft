@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <GLFW/glfw3.h>
+#include <cstdlib>
 
 namespace our {
 
@@ -64,6 +65,20 @@ namespace our {
             // Update block interaction timers
             if (player->timeSinceLastPlacement > 0) {
                 player->timeSinceLastPlacement -= static_cast<int>(deltaTime * 1000);
+            }
+
+            // Screen shake logic
+            if (player->shakeTimer > 0.0f) {
+                player->shakeTimer -= deltaTime;
+                if (camera) {
+                    float intensity = player->shakeIntensity * (player->shakeTimer / 0.5f);
+                    float rx = ((std::rand() % 100) / 100.0f - 0.5f) * 2.0f;
+                    float ry = ((std::rand() % 100) / 100.0f - 0.5f) * 2.0f;
+                    float rz = ((std::rand() % 100) / 100.0f - 0.5f) * 2.0f;
+                    camera->shakeOffset = glm::vec3(rx, ry, rz) * intensity;
+                }
+            } else if (camera) {
+                camera->shakeOffset = glm::vec3(0.0f);
             }
         }
 

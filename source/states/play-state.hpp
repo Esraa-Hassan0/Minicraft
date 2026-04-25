@@ -482,7 +482,8 @@ class Playstate : public our::State
             else
             {
                 player->health = std::max(0.0f, player->health - 10.0f);
-                player->meatCount = player->meatMax;
+                player->shakeTimer = 0.5f;
+                player->shakeIntensity = 0.2f;
                 if (player->health <= 0.0f)
                 {
                     player->isAlive = false;
@@ -1158,6 +1159,8 @@ class Playstate : public our::State
                 while (player->waterDamageTimer >= player->waterDamageInterval)
                 {
                     player->health -= player->waterDamageAmount;
+                    player->shakeTimer = 0.5f;
+                    player->shakeIntensity = 0.2f;
                     player->waterDamageTimer -= player->waterDamageInterval;
 
                     if (player->health <= 0.0f)
