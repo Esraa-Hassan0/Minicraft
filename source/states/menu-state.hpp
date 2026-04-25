@@ -78,8 +78,9 @@ class Menustate: public our::State {
     //  UI state 
     float time = 0.0f;
     float menuCameraYaw = 0.0f;
-    std::array<MenuButton, 2> buttons;
+    std::array<MenuButton, 3> buttons;
     std::vector<our::Mesh*> bgTerrainChunkMeshes;
+    bool showInstructions = false;
 
 public:
     // Transition flags from play-state
@@ -239,8 +240,14 @@ private:
             getApp()->changeState("play"); 
         };
 
-        buttons[1].label  = "EXIT";
-        buttons[1].action = [this](){ getApp()->close(); };
+        buttons[1].label  = "INSTRUCTIONS";
+        buttons[1].action = [this](){
+            our::AudioSystem::playSound("assets/sounds/uiBotton.wav");
+            showInstructions = true;
+        };
+
+        buttons[2].label  = "EXIT";
+        buttons[2].action = [this](){ getApp()->close(); };
     }
 
     void onDraw(double deltaTime) override {
@@ -263,11 +270,18 @@ private:
         //  Keyboard shortcuts 
         auto& kb = app.getKeyboard();
         if (kb.justPressed(GLFW_KEY_SPACE) || kb.justPressed(GLFW_KEY_ENTER)) {
-            our::AudioSystem::playSound("assets/sounds/uiBotton.wav");
-            app.changeState("play");
+            if (!showInstructions) {
+                our::AudioSystem::playSound("assets/sounds/uiBotton.wav");
+                app.changeState("play");
+            }
         }
         else if (kb.justPressed(GLFW_KEY_ESCAPE)) {
-            app.close();
+            if (showInstructions) {
+                our::AudioSystem::playSound("assets/sounds/uiBotton.wav");
+                showInstructions = false;
+            } else {
+                app.close();
+            }
         }
 
         //  Mouse 
@@ -275,8 +289,10 @@ private:
         glm::vec2 mousePos = mouse.getMousePosition();
 
         if (mouse.justPressed(0)) {
-            for (auto& btn : buttons)
-                if (btn.isInside(mousePos)) btn.action();
+            if (!showInstructions) {
+                for (auto& btn : buttons)
+                    if (btn.isInside(mousePos)) btn.action();
+            }
         }
 
         // 1 — render world, then copy result into sceneFBO for blurring
@@ -356,133 +372,134 @@ private:
         float fadeAlpha = glm::smoothstep(0.0f, 1.8f, time);
 
         //  Full-screen dim overlay (semi-transparent dark layer) 
+        float bgDim = showInstructions ? 0.85f : 0.45f;
         drawPanel(VP,
             glm::vec2(0, 0),
             glm::vec2(size),
-            glm::vec4(0.0f, 0.0f, 0.0f, 0.45f * fadeAlpha));
+            glm::vec4(0.0f, 0.0f, 0.0f, bgDim * fadeAlpha));
 
-        // Title Area
-        // Centered horizontally, 20% from top
-        float titleW = size.x * 0.55f;
-        float titleH = titleW * 0.22f;   // aspect ratio of the title image
-        float titleX = (size.x - titleW) * 0.5f;
-        float titleY = size.y * 0.10f;
+        if (!showInstructions) {
+            // Title Area
+            // Centered horizontally, 20% from top
+            float titleW = size.x * 0.55f;
+            float titleH = titleW * 0.22f;   // aspect ratio of the title image
+            float titleX = (size.x - titleW) * 0.5f;
+            float titleY = size.y * 0.10f;
 
-        if (titleTexture) {
-            titleShader->use();
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, titleTexture->getOpenGLName());
-            titleShader->set("tex", 0);
+            if (titleTexture) {
+                titleShader->use();
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, titleTexture->getOpenGLName());
+                titleShader->set("tex", 0);
 
-            glm::mat4 M = glm::translate(glm::mat4(1.0f), glm::vec3(titleX, titleY, 0.0f)) *
-                          glm::scale(glm::mat4(1.0f), glm::vec3(titleW, titleH, 1.0f));
-            titleShader->set("transform", VP * M);
+                glm::mat4 M = glm::translate(glm::mat4(1.0f), glm::vec3(titleX, titleY, 0.0f)) *
+                              glm::scale(glm::mat4(1.0f), glm::vec3(titleW, titleH, 1.0f));
+                titleShader->set("transform", VP * M);
 
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            quad->draw();
-        } else {
-            // if texture not found -> draw a placeholder rectangle
-            drawPanel(VP, glm::vec2(titleX, titleY), glm::vec2(titleW, titleH),
-                      glm::vec4(0.15f, 0.13f, 0.10f, 0.9f * fadeAlpha));
-        }
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                quad->draw();
+            } else {
+                // if texture not found -> draw a placeholder rectangle
+                drawPanel(VP, glm::vec2(titleX, titleY), glm::vec2(titleW, titleH),
+                          glm::vec4(0.15f, 0.13f, 0.10f, 0.9f * fadeAlpha));
+            }
 
-        // Welcome panel
-        // Dark semi-transparent box, centered, below the title
-        float panelW = size.x * 0.60f;
-        float panelH = size.y * 0.14f;
-        float panelX = (size.x - panelW) * 0.5f;
-        float panelY = size.y * 0.42f;
+            // Welcome panel
+            // Dark semi-transparent box, centered, below the title
+            float panelW = size.x * 0.60f;
+            float panelH = size.y * 0.14f;
+            float panelX = (size.x - panelW) * 0.5f;
+            float panelY = size.y * 0.42f;
 
-        // Panel background
-        drawPanel(VP,
-            glm::vec2(panelX, panelY),
-            glm::vec2(panelW, panelH),
-            glm::vec4(0.0f, 0.0f, 0.0f, 0.82f * fadeAlpha));
-
-        float border = 2.0f; // thickness of the border
-
-        glm::vec4 borderColor = glm::vec4(0.8f, 0.8f, 0.8f, fadeAlpha * 0.3f);
-
-        // Top
-        drawPanel(VP,
-            glm::vec2(panelX, panelY),
-            glm::vec2(panelW, border),
-            borderColor);
-
-        // Bottom
-        drawPanel(VP,
-            glm::vec2(panelX, panelY + panelH - border),
-            glm::vec2(panelW, border),
-            borderColor);
-
-        // Left
-        drawPanel(VP,
-            glm::vec2(panelX, panelY),
-            glm::vec2(border, panelH),
-            borderColor);
-
-        // Right
-        drawPanel(VP,
-            glm::vec2(panelX + panelW - border, panelY),
-            glm::vec2(border, panelH),
-            borderColor);
-
-        // Buttons
-        float btnW   = size.x * 0.28f;
-        float btnH   = size.y * 0.075f;
-        float btnGap = size.x * 0.04f;
-        float totalBtnW = btnW * 2 + btnGap;
-        float btnStartX = (size.x - totalBtnW) * 0.5f;
-        float btnY   = size.y * 0.62f;
-
-        // Lay out the two buttons side-by-side
-        buttons[0].position = { btnStartX, btnY };
-        buttons[0].size     = { btnW, btnH };
-        buttons[1].position = { btnStartX + btnW + btnGap, btnY };
-        buttons[1].size     = { btnW, btnH };
-
-        for (auto& btn : buttons) {
-            bool hovered = btn.isInside(mousePos);
-
-            // Outer outline
-            glm::vec4 outlineColor = hovered 
-                ? glm::vec4(1.0f, 1.0f, 1.0f, fadeAlpha) // white border when hovered
-                : glm::vec4(0.0f, 0.0f, 0.0f, fadeAlpha); // black border normally
-
-            drawPanel(VP, btn.position - glm::vec2(2.0f, 2.0f), btn.size + glm::vec2(4.0f, 4.0f), outlineColor);
-
-            // Button body
-            glm::vec4 btnColor = hovered
-                ? glm::vec4(0.45f, 0.45f, 0.45f, 1.0f * fadeAlpha) 
-                : glm::vec4(0.43f, 0.43f, 0.43f, 1.0f * fadeAlpha); 
-
-            drawPanel(VP, btn.position, btn.size, btnColor);
-
-            // Button top highlight edge
+            // Panel background
             drawPanel(VP,
-                btn.position,
-                glm::vec2(btn.size.x, 3.0f),
-                glm::vec4(0.9f, 0.9f, 0.9f, fadeAlpha * 0.7f));
+                glm::vec2(panelX, panelY),
+                glm::vec2(panelW, panelH),
+                glm::vec4(0.0f, 0.0f, 0.0f, 0.82f * fadeAlpha));
 
-            // Button bottom shadow edge
-            drawPanel(VP,
-                btn.position + glm::vec2(0, btn.size.y - 3.0f),
-                glm::vec2(btn.size.x, 3.0f),
-                glm::vec4(0.1f, 0.1f, 0.1f, fadeAlpha * 0.8f));
+            float border = 2.0f; // thickness of the border
 
-            // Button left edge
-            drawPanel(VP,
-                btn.position,
-                glm::vec2(3.0f, btn.size.y - 3.0f),
-                glm::vec4(0.9f, 0.9f, 0.9f, fadeAlpha * 0.7f));
+            glm::vec4 borderColor = glm::vec4(0.8f, 0.8f, 0.8f, fadeAlpha * 0.3f);
 
-            // Button right edge
+            // Top
             drawPanel(VP,
-                btn.position + glm::vec2(btn.size.x - 3.0f, 0),
-                glm::vec2(3.0f, btn.size.y),
-                glm::vec4(0.1f, 0.1f, 0.1f, fadeAlpha * 0.8f));
-        }
+                glm::vec2(panelX, panelY),
+                glm::vec2(panelW, border),
+                borderColor);
+
+            // Bottom
+            drawPanel(VP,
+                glm::vec2(panelX, panelY + panelH - border),
+                glm::vec2(panelW, border),
+                borderColor);
+
+            // Left
+            drawPanel(VP,
+                glm::vec2(panelX, panelY),
+                glm::vec2(border, panelH),
+                borderColor);
+
+            // Right
+            drawPanel(VP,
+                glm::vec2(panelX + panelW - border, panelY),
+                glm::vec2(border, panelH),
+                borderColor);
+
+            // Buttons
+            float btnW   = size.x * 0.28f;
+            float btnH   = size.y * 0.075f;
+            float btnGap = size.y * 0.035f;
+            float btnX   = (size.x - btnW) * 0.5f;
+            float btnStartY = size.y * 0.60f;
+
+            for (int i = 0; i < 3; i++) {
+                buttons[i].position = { btnX, btnStartY + i * (btnH + btnGap) };
+                buttons[i].size     = { btnW, btnH };
+            }
+
+            for (auto& btn : buttons) {
+                bool hovered = btn.isInside(mousePos);
+
+                // Outer outline
+                glm::vec4 outlineColor = hovered 
+                    ? glm::vec4(1.0f, 1.0f, 1.0f, fadeAlpha) // white border when hovered
+                    : glm::vec4(0.0f, 0.0f, 0.0f, fadeAlpha); // black border normally
+
+                drawPanel(VP, btn.position - glm::vec2(2.0f, 2.0f), btn.size + glm::vec2(4.0f, 4.0f), outlineColor);
+
+                // Button body
+                glm::vec4 btnColor = hovered
+                    ? glm::vec4(0.45f, 0.45f, 0.45f, 1.0f * fadeAlpha) 
+                    : glm::vec4(0.43f, 0.43f, 0.43f, 1.0f * fadeAlpha); 
+
+                drawPanel(VP, btn.position, btn.size, btnColor);
+
+                // Button top highlight edge
+                drawPanel(VP,
+                    btn.position,
+                    glm::vec2(btn.size.x, 3.0f),
+                    glm::vec4(0.9f, 0.9f, 0.9f, fadeAlpha * 0.7f));
+
+                // Button bottom shadow edge
+                drawPanel(VP,
+                    btn.position + glm::vec2(0, btn.size.y - 3.0f),
+                    glm::vec2(btn.size.x, 3.0f),
+                    glm::vec4(0.1f, 0.1f, 0.1f, fadeAlpha * 0.8f));
+
+                // Button left edge
+                drawPanel(VP,
+                    btn.position,
+                    glm::vec2(3.0f, btn.size.y - 3.0f),
+                    glm::vec4(0.9f, 0.9f, 0.9f, fadeAlpha * 0.7f));
+
+                // Button right edge
+                drawPanel(VP,
+                    btn.position + glm::vec2(btn.size.x - 3.0f, 0),
+                    glm::vec2(3.0f, btn.size.y),
+                    glm::vec4(0.1f, 0.1f, 0.1f, fadeAlpha * 0.8f));
+            }
+        } // close !showInstructions block
 
         glDisable(GL_BLEND);
     }
@@ -553,71 +570,139 @@ private:
             return ImGui::ColorConvertFloat4ToU32(c);
         };
 
-        // Welcome text inside the panel 
-        {
-            const char* line1 = "Welcome to MiniCraft";
-            const char* line2 = "We hope you enjoy playing our game";
-            ImVec4 titleColor = {0.95f, 0.95f, 0.95f, 1.0f};
+    if (!showInstructions) {
+            // Welcome text inside the panel 
+            {
+                const char* line1 = "Welcome to MiniCraft";
+                const char* line2 = "We hope you enjoy playing our game";
+                ImVec4 titleColor = {0.95f, 0.95f, 0.95f, 1.0f};
 
-            if (isGameOver) {
-                line1 = "GAME OVER";
-                line2 = "You have perished. Try again!";
-                titleColor = {1.0f, 0.2f, 0.2f, 1.0f};
-            } else if (isWin) {
-                line1 = "YOU WIN!";
-                line2 = "You have survived and conquered the world!";
-                titleColor = {1.0f, 0.84f, 0.0f, 1.0f};
+                if (isGameOver) {
+                    line1 = "GAME OVER";
+                    line2 = "You have perished. Try again!";
+                    titleColor = {1.0f, 0.2f, 0.2f, 1.0f};
+                } else if (isWin) {
+                    line1 = "YOU WIN!";
+                    line2 = "You have survived and conquered the world!";
+                    titleColor = {1.0f, 0.84f, 0.0f, 1.0f};
+                }
+
+                float textScale = size.x / 1280.0f;  // scale with window width
+                ImGui::SetWindowFontScale(textScale * 1.7f);
+
+                ImVec2 sz1 = ImGui::CalcTextSize(line1);
+                ImVec2 sz2 = ImGui::CalcTextSize(line2);
+
+                float lineH   = sz1.y + sz2.y + 10.0f;
+                float y1 = panelY + (panelH - lineH) * 0.5f;
+                float y2 = y1 + sz1.y + 10.0f;
+
+                // Line 1
+                float x1 = panelX + (panelW - sz1.x) * 0.5f;
+                float textShadow = textScale * 3.0f;
+                dl->AddText(ImVec2(x1 + textShadow, y1 + textShadow), fadeColor({0.35f, 0.35f, 0.35f, 1.0f}), line1); // shadow
+                dl->AddText(ImVec2(x1,     y1),     fadeColor(titleColor), line1);
+
+                // Line 2
+                float x2 = panelX + (panelW - sz2.x) * 0.5f;
+                dl->AddText(ImVec2(x2 + textShadow, y2 + textShadow), fadeColor({0.35f, 0.35f, 0.35f, 1.0f}), line2); // shadow
+                dl->AddText(ImVec2(x2,     y2),     fadeColor({0.90f, 0.90f, 0.90f, 1.0f}), line2);
+
+                ImGui::SetWindowFontScale(1.0f);
             }
 
-            float textScale = size.x / 1280.0f;  // scale with window width
-            ImGui::SetWindowFontScale(textScale * 1.7f);
+            // Button labels
+            {
+                float textScale = size.x / 1280.0f;
+                ImGui::SetWindowFontScale(textScale * 1.35f);
 
-            ImVec2 sz1 = ImGui::CalcTextSize(line1);
-            ImVec2 sz2 = ImGui::CalcTextSize(line2);
+                for (auto& btn : buttons) {
+                    bool hovered = btn.isInside(mousePos);
+                    ImVec4 txtColor = hovered
+                        ? ImVec4(1.0f, 1.0f, 0.4f, 1.0f)   // yellow when hovered
+                        : ImVec4(0.9f, 0.9f, 0.9f, 1.0f);  // white normally
 
-            float lineH   = sz1.y + sz2.y + 10.0f;
-            float y1 = panelY + (panelH - lineH) * 0.5f;
-            float y2 = y1 + sz1.y + 10.0f;
+                    ImVec2 labelSize = ImGui::CalcTextSize(btn.label.c_str());
+                    float  lx = btn.position.x + (btn.size.x - labelSize.x) * 0.5f;
+                    float  ly = btn.position.y + (btn.size.y - labelSize.y) * 0.5f;
 
-            // Line 1
-            float x1 = panelX + (panelW - sz1.x) * 0.5f;
-            float textShadow = textScale * 3.0f;
-            dl->AddText(ImVec2(x1 + textShadow, y1 + textShadow), fadeColor({0.35f, 0.35f, 0.35f, 1.0f}), line1); // shadow
-            dl->AddText(ImVec2(x1,     y1),     fadeColor(titleColor), line1);
-
-            // Line 2
-            float x2 = panelX + (panelW - sz2.x) * 0.5f;
-            dl->AddText(ImVec2(x2 + textShadow, y2 + textShadow), fadeColor({0.35f, 0.35f, 0.35f, 1.0f}), line2); // shadow
-            dl->AddText(ImVec2(x2,     y2),     fadeColor({0.90f, 0.90f, 0.90f, 1.0f}), line2);
-
-            ImGui::SetWindowFontScale(1.0f);
-        }
-
-        // Button labels
-        {
+                    // Drop shadow
+                    float btnShadow = textScale * 2.5f;
+                    dl->AddText(ImVec2(lx + btnShadow, ly + btnShadow),
+                        fadeColor({0.15f, 0.15f, 0.15f, 1.0f}),
+                        btn.label.c_str());
+                    // Main text
+                    dl->AddText(ImVec2(lx, ly),
+                        fadeColor(txtColor),
+                        btn.label.c_str());
+                }
+                ImGui::SetWindowFontScale(1.0f);
+            }
+        } else {
+            // Instructions Page
             float textScale = size.x / 1280.0f;
-            ImGui::SetWindowFontScale(textScale * 1.35f);
+            float paddingX = size.x * 0.35f;
+            float startY = size.y * 0.1f;
+            float lineSpace = textScale * 25.0f;
 
-            for (auto& btn : buttons) {
-                bool hovered = btn.isInside(mousePos);
-                ImVec4 txtColor = hovered
-                    ? ImVec4(1.0f, 1.0f, 0.4f, 1.0f)   // yellow when hovered
-                    : ImVec4(0.9f, 0.9f, 0.9f, 1.0f);  // white normally
+            // Colors
+            ImVec4 colorCyan(0.243f, 0.788f, 0.655f, 1.0f); // #3EC9A7
+            ImVec4 colorMagenta(0.906f, 0.082f, 0.373f, 1.0f); // #e7155f
+            ImVec4 colorWhite(1.0f, 1.0f, 1.0f, 1.0f);
+            ImVec4 colorDark(0.05f, 0.05f, 0.05f, 1.0f);
 
-                ImVec2 labelSize = ImGui::CalcTextSize(btn.label.c_str());
-                float  lx = btn.position.x + (btn.size.x - labelSize.x) * 0.5f;
-                float  ly = btn.position.y + (btn.size.y - labelSize.y) * 0.5f;
+            auto drawTextWithShadow = [&](const char* text, ImVec2 pos, ImVec4 color) {
+                float shadowOff = textScale * 3.0f;
+                dl->AddText(ImVec2(pos.x + shadowOff, pos.y + shadowOff), fadeColor(colorDark), text);
+                dl->AddText(pos, fadeColor(color), text);
+            };
 
-                // Drop shadow
-                float btnShadow = textScale * 2.5f;
-                dl->AddText(ImVec2(lx + btnShadow, ly + btnShadow),
-                    fadeColor({0.15f, 0.15f, 0.15f, 1.0f}),
-                    btn.label.c_str());
-                // Main text
-                dl->AddText(ImVec2(lx, ly),
-                    fadeColor(txtColor),
-                    btn.label.c_str());
-            }
+            // Section 1: Game Levels
+            ImGui::SetWindowFontScale(textScale * 2.8f);
+            drawTextWithShadow("GAME LEVELS", ImVec2(paddingX, startY), colorCyan);
+            
+            ImGui::SetWindowFontScale(textScale * 1.6f);
+            startY += lineSpace * 3.0f;
+            drawTextWithShadow("Level 1:", ImVec2(paddingX, startY), colorMagenta);
+            drawTextWithShadow("Survive 3 days", ImVec2(paddingX + textScale * 140.0f, startY), colorWhite);
+            
+            startY += lineSpace * 2.0f;
+            drawTextWithShadow("Level 2:", ImVec2(paddingX, startY), colorMagenta);
+            drawTextWithShadow("Kill 4 enemies", ImVec2(paddingX + textScale * 140.0f, startY), colorWhite);
+            
+            startY += lineSpace * 2.0f;
+            drawTextWithShadow("Level 3:", ImVec2(paddingX, startY), colorMagenta);
+            drawTextWithShadow("Get one diamond", ImVec2(paddingX + textScale * 140.0f, startY), colorWhite);
+
+            // Section 2: Shortcuts
+            startY += lineSpace * 3.5f;
+            ImGui::SetWindowFontScale(textScale * 2.8f);
+            drawTextWithShadow("SHORTCUTS", ImVec2(paddingX, startY), colorCyan);
+            
+            ImGui::SetWindowFontScale(textScale * 1.6f);
+            startY += lineSpace * 3.0f;
+            
+            auto drawShortcut = [&](const char* key, const char* desc) {
+                drawTextWithShadow(key, ImVec2(paddingX, startY), colorMagenta);
+                float offset = textScale * 250.0f;
+                drawTextWithShadow(desc, ImVec2(paddingX + offset, startY), colorWhite);
+                startY += lineSpace * 2.0f;
+            };
+
+            drawShortcut("W A S D", "Move character");
+            drawShortcut("Space", "Jump / Swim Up");
+            drawShortcut("Left / Right Click", "Mine / Place Block");
+            drawShortcut("E", "Open / Close Inventory");
+            drawShortcut("1 - 5", "Select Hotbar Item");
+            drawShortcut("ESC", "Return to Menu");
+
+            // Bottom message
+            startY += lineSpace * 3.5f;
+            ImGui::SetWindowFontScale(textScale * 1.4f);
+            const char* escMsg = "Press ESC to return";
+            float escTextW = ImGui::CalcTextSize(escMsg).x;
+            drawTextWithShadow(escMsg, ImVec2((size.x - escTextW)*0.5f, startY), colorWhite);
+            
             ImGui::SetWindowFontScale(1.0f);
         }
 
