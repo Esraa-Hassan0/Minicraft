@@ -91,6 +91,10 @@ set(COMMON_SOURCES
         source/common/components/component-deserializer.hpp
         source/common/components/light.hpp
         source/common/components/light.cpp
+        source/common/components/player.hpp
+        source/common/components/player.cpp
+        source/common/components/aabb-collider.hpp
+        source/common/components/enemy-component.hpp
         source/common/components/hand.hpp
         source/common/components/hand.cpp
 
@@ -98,6 +102,11 @@ set(COMMON_SOURCES
         source/common/systems/forward-renderer.cpp
         source/common/systems/free-camera-controller.hpp
         source/common/systems/movement.hpp
+        source/common/systems/player-controller.hpp
+        source/common/systems/collision-system.hpp
+        source/common/systems/block-interaction.hpp
+        source/common/systems/enemy-system.hpp
+        source/common/systems/light.hpp
         source/common/systems/time-system.hpp
         source/common/systems/time-system.cpp
         source/common/systems/hand-system.hpp
