@@ -66,6 +66,10 @@ namespace our {
         // Game outcome
         GameState gameState = GameState::PLAYING;
 
+        // Screen Shake
+        float shakeTimer = 0.0f;
+        float shakeIntensity = 0.0f;
+
         // XP Leveling System
         int level = 1;
         float currentXP = 0.0f;

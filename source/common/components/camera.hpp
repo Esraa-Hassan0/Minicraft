@@ -21,6 +21,9 @@ namespace our {
         float fovY; // The field of view angle of the camera if it is a perspective camera
         float orthoHeight; // The orthographic height of the camera if it is an orthographic camera
 
+        // Screen Shake Offset
+        glm::vec3 shakeOffset = glm::vec3(0.0f);
+
         // The ID of this component type is "Camera"
         static std::string getID() { return "Camera"; }
 
