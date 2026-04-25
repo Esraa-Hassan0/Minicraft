@@ -18,7 +18,10 @@ public:
     int height = 100;
     int waterLevel = 6;
     int stoneLevel = 4;
+    // fluid system parameters
     std::unordered_map<std::string, Chunk> activeChunks;
+    std::vector<glm::ivec3> fluidQueue; 
+    float fluidTickTimer = 0.0f;
 
     World() = default;
 
@@ -30,9 +33,12 @@ public:
 
     RayHit castRay(glm::vec3 start, glm::vec3 direction, float maxDistance = 8.0f) const;
     void breakBlock(const RayHit& hit);
-     void placeBlock(const RayHit& hit, int type);
+    void placeBlock(const RayHit& hit, int type);
      
-     int getLight(int worldX, int y, int worldZ) const;
+    int getLight(int worldX, int y, int worldZ) const;
+
+    void triggerBlockUpdate(int worldX, int worldY, int worldZ);
+    void updateFluids(float deltaTime, bool& meshDirtyFlag);
 };
 
 } // namespace voxel

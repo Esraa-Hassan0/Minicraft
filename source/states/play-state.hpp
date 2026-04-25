@@ -994,6 +994,11 @@ class Playstate : public our::State
 
         // 1. Draw Hotbar
         our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
+        if (player && player->isUnderwater) {
+            ImDrawList *bgList = ImGui::GetBackgroundDrawList();
+            
+            bgList->AddRectFilled(ImVec2(0, 0), displaySize, IM_COL32(10, 40, 120, 180)); 
+        }
         if (player)
         {
             ImGuiWindowFlags invFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground;
@@ -1226,7 +1231,6 @@ class Playstate : public our::State
     {
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
-
         our::Entity *playerEntity = findPlayerEntity();
         if (playerEntity)
             streamChunksAroundPlayer(playerEntity->localTransform.position);
@@ -1234,7 +1238,7 @@ class Playstate : public our::State
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
         timeSystem.update(&engineWorld, (float)deltaTime);
-
+        terrainWorld.updateFluids((float)deltaTime, terrainMeshDirty);
         if (playerEntity)
             enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
 
