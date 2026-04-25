@@ -32,7 +32,7 @@ namespace our
         LightComponent *nightLight;
 
     public:
-        void initialize(World *world, float dayDuration = 120.0f);
+        void initialize(World *world, float dayDuration = 20.0f);
 
         void update(World *world, float deltaTime);
 

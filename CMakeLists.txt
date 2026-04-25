@@ -95,6 +95,8 @@ set(COMMON_SOURCES
         source/common/components/player.cpp
         source/common/components/aabb-collider.hpp
         source/common/components/enemy-component.hpp
+        source/common/components/hand.hpp
+        source/common/components/hand.cpp
 
         source/common/systems/forward-renderer.hpp
         source/common/systems/forward-renderer.cpp
@@ -107,6 +109,7 @@ set(COMMON_SOURCES
         source/common/systems/light.hpp
         source/common/systems/time-system.hpp
         source/common/systems/time-system.cpp
+        source/common/systems/hand-system.hpp
 
         source/common/audio/audio.hpp
         source/common/audio/audio.cpp

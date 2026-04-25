@@ -13,12 +13,17 @@
 #include <systems/time-system.hpp>
 #include <systems/block-interaction.hpp>
 #include <systems/enemy-system.hpp>
+#include <systems/npc-movement-system.hpp>
+#include <systems/hand-system.hpp>
 #include <asset-loader.hpp>
 #include <texture/texture2d.hpp>
 #include <voxel/world.hpp>
 #include <components/mesh-renderer.hpp>
 #include <components/player.hpp>
 #include <components/enemy-component.hpp>
+#include <components/killable-npc.hpp>
+#include <components/npc-movement.hpp>
+#include <components/hand.hpp>
 #include <audio/audio.hpp>
 #include <unordered_map>
 #include <vector>
@@ -28,11 +33,13 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 class Playstate : public our::State {
     struct ChunkRenderGroup {
         std::vector<our::Entity*> entities;
         std::vector<our::Mesh*> meshes;
+        std::vector<NPCSpawnData> npcs;
     };
 
     // Terrain and ECS Systems
@@ -45,20 +52,32 @@ class Playstate : public our::State {
     our::CollisionSystem collisionSystem;
     our::LightSystem lightSystem;
     our::TimeSystem timeSystem;
+    our::EnemySystem enemySystem;
+    our::NPCMovementSystem npcMovementSystem;
+    BlockInteractionSystem blockInteraction;
+
     our::Entity* highlightEntity = nullptr;      // Semi-transparent fill
     our::Entity* highlightEdgesEntity = nullptr; // Clean square borders
     our::Mesh* highlightEdgesMesh = nullptr;     // Line-based mesh for borders
     our::Entity* portalEntity = nullptr;         // Win-condition portal
+    
+    // First-person Steve rig
     our::Entity* firstPersonRightArm = nullptr;
     our::Entity* firstPersonLeftArm = nullptr;
     float firstPersonAnimTime = 0.0f;
     float firstPersonAttackTimer = 0.0f;
+    
+    // Combat mechanics
     float meleeCooldown = 0.0f;
     const float meleeCooldownDuration = 0.24f;
     const float meleeRange = 3.0f;
     const float meleeDamage = 8.0f;
-    BlockInteractionSystem blockInteraction;
-    our::EnemySystem enemySystem;
+
+    // Hand Animation & UI State
+    float handAnimTime = 0.0f;
+    float hitAnimTime = 0.0f;
+    bool isHitting = false;
+    bool isInventoryOpen = false;
 
     // Chunk Streaming State
     int chunkLoadRadius = 2;
@@ -67,9 +86,12 @@ class Playstate : public our::State {
     int currentCenterChunkZ = std::numeric_limits<int>::min();
     bool terrainMeshDirty = true;
     std::unordered_map<std::string, ChunkRenderGroup> chunkRenderGroups;
+    std::vector<NPCSpawnData> npcTemplates;
 
-    // --- Inventory & Hotbar Helpers ---
+    // --- Inventory, Hotbar & Level Helpers ---
     static constexpr int kHotbarSlots = 5;
+    float levelUpNotificationTime = 0.0f;
+    int displayedLevel = 1;
 
     static int hotbarBlockType(int slot) {
         static const int types[kHotbarSlots] = {
@@ -88,8 +110,17 @@ class Playstate : public our::State {
         }
     }
 
-    void registerCollectedBlock(our::PlayerComponent* player, int blockType) {
-        int* slot = inventoryCountForType(player, blockType);
+    void registerCollectedBlock(our::PlayerComponent *player, int blockType) {
+        // Level 3: Collecting Diamond fills XP to complete leveling
+        if (player && player->level == 3 && blockType == voxel::Diamond) {
+            player->currentXP = 1.0f;
+            player->level = 4;
+            levelUpNotificationTime = 3.0f;
+            displayedLevel = 4;
+            our::AudioSystem::playSound("assets/sounds/levelup.wav");
+        }
+
+        int *slot = inventoryCountForType(player, blockType);
         if (slot) {
             (*slot)++;
             player->resourcesCollected++;
@@ -193,6 +224,60 @@ class Playstate : public our::State {
         return true;
     }
 
+    void killNPCAndAwardMeat(our::Entity *npcEntity, our::PlayerComponent *player) {
+        if (!npcEntity || !player) return;
+        auto *killable = npcEntity->getComponent<our::KillableNPCComponent>();
+        if (killable) {
+            if (killable->npcType == "chest") {
+                // Increase health for chests, capped at max health
+                player->health = std::min(player->health + killable->foodReward, player->maxHealth);
+            } else {
+                // Original behavior for other NPCs (increase meat count)
+                player->meatCount += killable->foodReward;
+
+                // Level 2: Add 1/4 XP per enemy killed
+                if (player->level == 2) {
+                    player->currentXP += 1.0f / 4.0f;
+                    if (player->currentXP >= 1.0f) {
+                        player->level = 3;
+                        player->currentXP = 0.0f;
+                        levelUpNotificationTime = 3.0f;
+                        displayedLevel = 3;
+                        our::AudioSystem::playSound("assets/sounds/levelup.wav");
+                    }
+                }
+            }
+        }
+        engineWorld.markForRemoval(npcEntity);
+    }
+
+    our::Entity *findHitNPC(const glm::vec3 &camPos, const glm::vec3 &camDir, float maxDist) {
+        float closestDist = maxDist;
+        our::Entity *closestNPC = nullptr;
+
+        for (auto entity : engineWorld.getEntities()) {
+            if (!entity) continue;
+            auto *killable = entity->getComponent<our::KillableNPCComponent>();
+            if (!killable) continue;
+
+            glm::vec3 npcPos = entity->localTransform.position;
+            glm::vec3 toNPC = npcPos - camPos;
+            float t = glm::dot(toNPC, camDir);
+            if (t < 0.0f) continue;
+
+            glm::vec3 closestPoint = camPos + camDir * t;
+            glm::vec3 diff = closestPoint - npcPos;
+            float distSq = glm::dot(diff, diff);
+            float radius = 0.5f;
+
+            if (distSq < radius * radius && t < closestDist) {
+                closestDist = t;
+                closestNPC = entity;
+            }
+        }
+        return closestNPC;
+    }
+
     void setupFirstPersonRig(our::Entity* playerEntity) {
         if (!playerEntity) return;
 
@@ -255,12 +340,16 @@ class Playstate : public our::State {
         }
     }
 
-    // --- Chunk Rendering Management (from world/chunks) ---
+    // --- Chunk Rendering & NPCs ---
     void clearChunkRenderGroup(const std::string& chunkKey) {
         auto it = chunkRenderGroups.find(chunkKey);
-        if (it == chunkRenderGroups.end()) return;
-        for (auto* entity : it->second.entities) engineWorld.markForRemoval(entity);
-        for (auto* mesh : it->second.meshes) delete mesh;
+        if (it == chunkRenderGroups.end())
+            return;
+        for (auto *entity : it->second.entities)
+            engineWorld.markForRemoval(entity);
+        for (auto *mesh : it->second.meshes)
+            delete mesh;
+        // NPCs are tracked but not stored as entities in renderGroup, they use engineWorld directly
         chunkRenderGroups.erase(it);
     }
 
@@ -270,6 +359,109 @@ class Playstate : public our::State {
             for (auto* mesh : entry.second.meshes) delete mesh;
         }
         chunkRenderGroups.clear();
+    }
+
+    void spawnNPCsInChunk(int cx, int cz) {
+        std::string chunkKey = std::to_string(cx) + "_" + std::to_string(cz);
+
+        // Already spawned NPCs in this chunk
+        if (chunkRenderGroups.find(chunkKey) != chunkRenderGroups.end() &&
+            !chunkRenderGroups[chunkKey].npcs.empty())
+            return;
+
+        if (npcTemplates.empty()) return;
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> npcCountDist(0, 1);
+        std::uniform_int_distribution<> templateDist(0, static_cast<int>(npcTemplates.size()) - 1);
+
+        int numNPCs = npcCountDist(gen);
+
+        for (int i = 0; i < numNPCs; ++i) {
+            std::uniform_int_distribution<> localDist(0, voxel::Chunk::CHUNK_SIZE - 1);
+            int lx = localDist(gen);
+            int ly = terrainWorld.height - 1;
+            int lz = localDist(gen);
+
+            while (ly >= 0 && terrainWorld.getBlock(cx * voxel::Chunk::CHUNK_SIZE + lx, ly, cz * voxel::Chunk::CHUNK_SIZE + lz) == 0) {
+                ly--;
+            }
+            if (ly < 0) continue;
+
+            // Check if water is nearby (within 3 blocks)
+            bool nearWater = false;
+            int checkX = cx * voxel::Chunk::CHUNK_SIZE + lx;
+            int checkZ = cz * voxel::Chunk::CHUNK_SIZE + lz;
+            for (int dx = -3; dx <= 3 && !nearWater; dx++) {
+                for (int dz = -3; dz <= 3 && !nearWater; dz++) {
+                    for (int dy = -2; dy <= 2; dy++) {
+                        if (terrainWorld.getBlock(checkX + dx, ly + dy, checkZ + dz) == voxel::WATER) {
+                            nearWater = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (nearWater) continue;
+
+            float worldX = cx * voxel::Chunk::CHUNK_SIZE + lx + 0.5f;
+            float worldZ = cz * voxel::Chunk::CHUNK_SIZE + lz + 0.5f;
+
+            const auto &templateData = npcTemplates[templateDist(gen)];
+
+            float blockTopY = ly + 1.0f;
+            float colliderBottomLocal = templateData.aabbCenter.y - templateData.aabbHalfSize.y;
+            float desiredEntityY = blockTopY - colliderBottomLocal + 0.3f;
+
+            our::Entity *npcEntity = engineWorld.add();
+            npcEntity->localTransform.position = glm::vec3(worldX, desiredEntityY, worldZ);
+            npcEntity->localTransform.scale = glm::vec3(templateData.scaleX, templateData.scaleY, templateData.scaleZ);
+
+            auto *meshRenderer = npcEntity->addComponent<our::MeshRendererComponent>();
+            meshRenderer->mesh = our::AssetLoader<our::Mesh>::get(templateData.meshName);
+            meshRenderer->material = our::AssetLoader<our::Material>::get(templateData.matName);
+
+            auto *aabb = npcEntity->addComponent<our::AABBColliderComponent>();
+            aabb->center = templateData.aabbCenter;
+            aabb->halfSize = templateData.aabbHalfSize;
+
+            auto *movement = npcEntity->addComponent<our::NPCMovementComponent>();
+            movement->startPosition = npcEntity->localTransform.position;
+            movement->speed = templateData.speed;
+            movement->moveRadius = templateData.moveRadius;
+            movement->waitTime = templateData.waitTime;
+
+            if (templateData.movementType == "idle")
+                movement->movementType = our::NPCMovementComponent::MovementType::IDLE;
+            else if (templateData.movementType == "patrol")
+                movement->movementType = our::NPCMovementComponent::MovementType::PATROL;
+            else if (templateData.movementType == "follow_player")
+                movement->movementType = our::NPCMovementComponent::MovementType::FOLLOW_PLAYER;
+            else
+                movement->movementType = our::NPCMovementComponent::MovementType::RANDOM_WALK;
+
+            auto *killable = npcEntity->addComponent<our::KillableNPCComponent>();
+            killable->foodReward = templateData.foodReward;
+            killable->npcType = templateData.npcType;
+
+            // Store NPC spawn data in chunk render group
+            NPCSpawnData spawnData = templateData;
+            spawnData.chunkX = cx; spawnData.chunkZ = cz;
+            spawnData.localX = lx; spawnData.localY = ly; spawnData.localZ = lz;
+            chunkRenderGroups[chunkKey].npcs.push_back(spawnData);
+        }
+    }
+
+    void spawnNPCs() {
+        if (npcTemplates.empty()) return;
+        our::Entity *playerEntity = findPlayerEntity();
+        if (!playerEntity) return;
+
+        glm::vec3 playerPos = playerEntity->localTransform.position;
+        int cx = (int)std::floor(playerPos.x / (float)voxel::Chunk::CHUNK_SIZE);
+        int cz = (int)std::floor(playerPos.z / (float)voxel::Chunk::CHUNK_SIZE);
+        spawnNPCsInChunk(cx, cz);
     }
 
     void buildChunkRenderGroup(const std::string& chunkKey, const voxel::Chunk& chunk) {
@@ -321,6 +513,7 @@ class Playstate : public our::State {
         addGrassFaces(our::mesh_utils::FaceCategory::BOTTOM, "dirt");
         addGrassFaces(our::mesh_utils::FaceCategory::SIDES, "grass-side");
 
+        spawnNPCsInChunk(chunk.chunkX, chunk.chunkZ);
         chunkRenderGroups[chunkKey] = std::move(renderGroup);
     }
 
@@ -357,6 +550,7 @@ class Playstate : public our::State {
                 if (terrainWorld.activeChunks.find(key) == terrainWorld.activeChunks.end()) {
                     terrainWorld.generateChunk(cx, cz);
                     chunkSetChanged = true;
+                    spawnNPCsInChunk(cx, cz);
                 }
             }
         }
@@ -381,7 +575,7 @@ class Playstate : public our::State {
         }
     }
 
-    // --- UI Drawing (Combined) ---
+    // --- UI Drawing Helpers ---
     static void drawHotbarResourceIcon(ImDrawList* dl, int hotbarSlot, const ImVec2& iconMin, const ImVec2& iconMax) {
         const ImU32 outline = IM_COL32(18, 18, 22, 220);
         our::Texture2D* tex = nullptr;
@@ -410,6 +604,58 @@ class Playstate : public our::State {
             chunkUnloadRadius = std::max(terrainConfig.value("chunk-unload-radius", chunkLoadRadius + 1), chunkLoadRadius);
         }
 
+        if (config.contains("npcTypes") && config["npcTypes"].is_array()) {
+            for (const auto &npcTypeJson : config["npcTypes"]) {
+                if (!npcTypeJson.is_object()) continue;
+                NPCSpawnData templateData;
+                templateData.meshName = npcTypeJson.value("mesh", "cube");
+                templateData.matName = npcTypeJson.value("material", "default");
+
+                if (npcTypeJson.contains("scale") && npcTypeJson["scale"].is_array() && npcTypeJson["scale"].size() >= 3) {
+                    templateData.scaleX = npcTypeJson["scale"][0].get<float>();
+                    templateData.scaleY = npcTypeJson["scale"][1].get<float>();
+                    templateData.scaleZ = npcTypeJson["scale"][2].get<float>();
+                } else {
+                    templateData.scaleX = templateData.scaleY = templateData.scaleZ = 0.5f;
+                }
+
+                if (npcTypeJson.contains("components") && npcTypeJson["components"].is_object()) {
+                    const auto &comp = npcTypeJson["components"];
+                    templateData.foodReward = comp.value("foodReward", 1);
+                    templateData.npcType = comp.value("npcType", "default");
+
+                    if (comp.contains("AABBCollider") && comp["AABBCollider"].is_object()) {
+                        const auto &aabbJson = comp["AABBCollider"];
+                        templateData.aabbCenter = glm::vec3(0.0f);
+                        templateData.aabbHalfSize = glm::vec3(0.2f);
+                        if (aabbJson.contains("center") && aabbJson["center"].is_array() && aabbJson["center"].size() >= 3) {
+                            templateData.aabbCenter = glm::vec3(aabbJson["center"][0].get<float>(), aabbJson["center"][1].get<float>(), aabbJson["center"][2].get<float>());
+                        }
+                        if (aabbJson.contains("halfSize") && aabbJson["halfSize"].is_array() && aabbJson["halfSize"].size() >= 3) {
+                            templateData.aabbHalfSize = glm::vec3(aabbJson["halfSize"][0].get<float>(), aabbJson["halfSize"][1].get<float>(), aabbJson["halfSize"][2].get<float>());
+                        }
+                    }
+                } else {
+                    templateData.foodReward = 1;
+                    templateData.npcType = "default";
+                }
+
+                if (npcTypeJson.contains("movement") && npcTypeJson["movement"].is_object()) {
+                    const auto &mov = npcTypeJson["movement"];
+                    templateData.speed = mov.value("speed", 1.0f);
+                    templateData.moveRadius = mov.value("moveRadius", 5.0f);
+                    templateData.waitTime = mov.value("waitTime", 2.0f);
+                    templateData.movementType = mov.value("movementType", "random_walk");
+                } else {
+                    templateData.speed = 1.0f;
+                    templateData.moveRadius = 5.0f;
+                    templateData.waitTime = 2.0f;
+                    templateData.movementType = "random_walk";
+                }
+                npcTemplates.push_back(templateData);
+            }
+        }
+
         cameraController.enter(getApp());
         playerController.enter(getApp());
         timeSystem.initialize(&engineWorld);
@@ -419,14 +665,14 @@ class Playstate : public our::State {
         auto* meshRenderer = highlightEntity->addComponent<our::MeshRendererComponent>();
         meshRenderer->mesh = our::AssetLoader<our::Mesh>::get("cube");
         meshRenderer->material = our::AssetLoader<our::Material>::get("highlight-fill");
-        highlightEntity->localTransform.scale = glm::vec3(0.502f); // Slightly larger than a block
+        highlightEntity->localTransform.scale = glm::vec3(0.502f);
 
         highlightEdgesEntity = engineWorld.add();
         auto* edgesRenderer = highlightEdgesEntity->addComponent<our::MeshRendererComponent>();
         highlightEdgesMesh = our::mesh_utils::cubeEdges();
         edgesRenderer->mesh = highlightEdgesMesh;
         edgesRenderer->material = our::AssetLoader<our::Material>::get("wireframe");
-        highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f); // Slightly larger than the fill to avoid z-fighting
+        highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f);
 
         blockInteraction.initialize(&engineWorld);
         enemySystem.initialize();
@@ -436,7 +682,6 @@ class Playstate : public our::State {
         our::Entity* playerEntity = findPlayerEntity();
         if (playerEntity) {
             streamChunksAroundPlayer(playerEntity->localTransform.position);
-            // Spawn player on top of terrain
             auto& pos = playerEntity->localTransform.position;
             for (int y = terrainWorld.height - 1; y >= 0; --y) {
                 if (terrainWorld.getBlock(pos.x, y, pos.z) != 0) {
@@ -449,7 +694,6 @@ class Playstate : public our::State {
         // Spawn portal entity for win condition
         {
             glm::vec3 portalPos(30.0f, 1.0f, 30.0f);
-            // Find ground at portal location
             for (int y = terrainWorld.height - 1; y >= 0; --y) {
                 if (terrainWorld.getBlock(30, y, 30) != 0 && terrainWorld.getBlock(30, y, 30) != voxel::WATER) {
                     portalPos.y = (float)(y + 1) + 0.5f;
@@ -466,136 +710,235 @@ class Playstate : public our::State {
         }
 
         if (terrainMeshDirty) rebuildMesh();
+
+        // Initialize NPC Movement System
+        npcMovementSystem.initialize(playerEntity, &terrainWorld);
+        spawnNPCs();
+        for (auto entity : engineWorld.getEntities()) {
+            if (!entity) continue;
+            auto *npcMove = entity->getComponent<our::NPCMovementComponent>();
+            if (npcMove) npcMove->startPosition = entity->localTransform.position;
+        }
     }
 
     void onImmediateGui() override {
-        our::Entity* playerEntity = findPlayerEntity();
+        our::Entity *playerEntity = findPlayerEntity();
         if (!playerEntity) return;
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-        
-        // 1. Draw Hotbar
         our::PlayerComponent* player = playerEntity->getComponent<our::PlayerComponent>();
-        if (player) {
-            ImGuiWindowFlags invFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground;
-            constexpr float box = 60.0f, gap = 8.0f, iconSize = 34.0f;
-            ImVec2 invSize(kHotbarSlots * box + (kHotbarSlots - 1) * gap + 24.0f, box + 26.0f);
-            ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f - invSize.x * 0.5f, displaySize.y - invSize.y - 16.0f), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(invSize, ImGuiCond_Always);
-            if (ImGui::Begin("InventoryHotbar", nullptr, invFlags)) {
-                ImGui::SetCursorPos(ImVec2(12.0f, 12.0f));
-                int counts[] = {player->inventoryGrass, player->inventoryDirt, player->inventoryWood, player->inventoryStone, player->inventorySand};
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                for (int i = 0; i < kHotbarSlots; i++) {
-                    if (i > 0) ImGui::SameLine(0.0f, gap);
-                    ImGui::PushID(i);
-                    const bool selected = (player->inventoryHotbarSlot == i);
-                    ImVec2 p = ImGui::GetCursorScreenPos();
-                    ImVec2 br(p.x + box, p.y + box);
-                    dl->AddRectFilled(p, br, selected ? IM_COL32(55, 85, 130, 230) : IM_COL32(28, 28, 32, 220), 6.0f);
-                    drawHotbarResourceIcon(dl, i, ImVec2(p.x + (box-iconSize)*0.5f, p.y + 5.0f), ImVec2(p.x + (box+iconSize)*0.5f, p.y + 5.0f + iconSize));
-                    dl->AddRect(p, br, selected ? IM_COL32(240, 200, 90, 255) : IM_COL32(90, 90, 98, 255), 6.0f, ImDrawCornerFlags_All, selected ? 2.5f : 1.0f);
-                    if (ImGui::InvisibleButton("slot", ImVec2(box, box))) player->inventoryHotbarSlot = i;
-                    char cnt[12]; std::snprintf(cnt, sizeof(cnt), "x%d", counts[i]);
-                    ImVec2 ts = ImGui::CalcTextSize(cnt);
-                    dl->AddText(ImVec2(p.x + (box - ts.x) * 0.5f, p.y + box - ts.y - 4.0f), IM_COL32_WHITE, cnt);
-                    ImGui::PopID();
+
+        // Draw Inventory Window Overlay
+        if (isInventoryOpen) {
+            ImVec2 windowSize(400, 360);
+            ImGui::SetNextWindowPos(ImVec2((displaySize.x - windowSize.x) * 0.5f, (displaySize.y - windowSize.y) * 0.5f), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
+
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.76f, 0.76f, 0.76f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+
+            ImGui::Begin("Inventory", &isInventoryOpen, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+
+            // Crafting Section
+            ImGui::SetCursorPos(ImVec2(180, 20));
+            ImGui::BeginGroup();
+            ImGui::Text("Crafting");
+            for (int r = 0; r < 2; r++) {
+                for (int c = 0; c < 2; c++) {
+                    ImGui::Button(("##craft" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
+                    if (c < 1) ImGui::SameLine();
                 }
             }
+            ImGui::EndGroup();
+
+            ImGui::SameLine(0, 15);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 25);
+            ImGui::Text("->");
+            ImGui::SameLine(0, 15);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 10);
+            ImGui::Button("##craft_out", ImVec2(45, 45));
+
+            ImGui::Spacing(); ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Main Inventory Section
+            ImGui::SetCursorPosX(16);
+            ImGui::Text("Inventory");
+
+            ImGui::SetCursorPosX(16);
+            for (int r = 0; r < 3; r++) {
+                for (int c = 0; c < 9; c++) {
+                    ImGui::Button(("##inv" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
+                    if (c < 8) ImGui::SameLine();
+                }
+                if (r < 2) ImGui::SetCursorPosX(16);
+            }
+
+            ImGui::Spacing(); ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Hotbar Section (in inventory)
+            ImGui::SetCursorPosX(16);
+            for (int c = 0; c < 9; c++) {
+                ImGui::Button(("##hotbar_inv" + std::to_string(c)).c_str(), ImVec2(36, 36));
+                if (c < 8) ImGui::SameLine();
+            }
+
             ImGui::End();
-        }
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
+        } else {
+            // Gameplay HUD (Only draw when inventory is closed)
+            ImDrawList *drawList = ImGui::GetForegroundDrawList();
 
-        // 2. Draw Health
-        our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
-        if (heartsTex) {
-            ImDrawList* fgDl = ImGui::GetForegroundDrawList();
-            float heartSize = 28.0f;
-            float heartGap = 2.0f;
-            float maxHearts = 10;
-            float totalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
-            float startX = displaySize.x * 0.5f - totalW * 0.5f;
-            float invH = 60.0f + 26.0f; // hotbar frame height
-            float startY = displaySize.y - invH - 16.0f - heartSize - 12.0f;
-                
-            ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
-            float texW = 45.0f;
+            // 1. Draw Hotbar
+            if (player) {
+                ImGuiWindowFlags invFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground;
+                constexpr float box = 60.0f, gap = 8.0f, iconSize = 34.0f;
+                ImVec2 invSize(kHotbarSlots * box + (kHotbarSlots - 1) * gap + 24.0f, box + 26.0f);
+                ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f - invSize.x * 0.5f, displaySize.y - invSize.y - 16.0f), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(invSize, ImGuiCond_Always);
+                if (ImGui::Begin("InventoryHotbar", nullptr, invFlags)) {
+                    ImGui::SetCursorPos(ImVec2(12.0f, 12.0f));
+                    int counts[] = {player->inventoryGrass, player->inventoryDirt, player->inventoryWood, player->inventoryStone, player->inventorySand};
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    for (int i = 0; i < kHotbarSlots; i++) {
+                        if (i > 0) ImGui::SameLine(0.0f, gap);
+                        ImGui::PushID(i);
+                        const bool selected = (player->inventoryHotbarSlot == i);
+                        ImVec2 p = ImGui::GetCursorScreenPos();
+                        ImVec2 br(p.x + box, p.y + box);
+                        dl->AddRectFilled(p, br, selected ? IM_COL32(55, 85, 130, 230) : IM_COL32(28, 28, 32, 220), 6.0f);
+                        drawHotbarResourceIcon(dl, i, ImVec2(p.x + (box-iconSize)*0.5f, p.y + 5.0f), ImVec2(p.x + (box+iconSize)*0.5f, p.y + 5.0f + iconSize));
+                        dl->AddRect(p, br, selected ? IM_COL32(240, 200, 90, 255) : IM_COL32(90, 90, 98, 255), 6.0f, ImDrawCornerFlags_All, selected ? 2.5f : 1.0f);
+                        if (ImGui::InvisibleButton("slot", ImVec2(box, box))) player->inventoryHotbarSlot = i;
+                        char cnt[12]; std::snprintf(cnt, sizeof(cnt), "x%d", counts[i]);
+                        ImVec2 ts = ImGui::CalcTextSize(cnt);
+                        dl->AddText(ImVec2(p.x + (box - ts.x) * 0.5f, p.y + box - ts.y - 4.0f), IM_COL32_WHITE, cnt);
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::End();
+            }
 
-            int fullHearts = static_cast<int>(player->health / 10.0f);
-            float partialHeart = (player->health / 10.0f) - fullHearts;
+            // 2. Draw Health
+            our::Texture2D* heartsTex = our::AssetLoader<our::Texture2D>::get("hearts");
+            if (heartsTex && player) {
+                float heartSize = 28.0f, heartGap = 2.0f, maxHearts = 10;
+                float totalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
+                float startX = displaySize.x * 0.5f - totalW * 0.5f;
+                float invH = 60.0f + 26.0f;
+                float startY = displaySize.y - invH - 16.0f - heartSize - 12.0f;
+                ImTextureID texID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
+                float texW = 45.0f;
+                int fullHearts = static_cast<int>(player->health / 10.0f);
+                float partialHeart = (player->health / 10.0f) - fullHearts;
 
-            ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
-            ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
-            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
-            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
+                ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f), uvFull1((36.0f - 0.5f) / texW, 0.0f);
+                ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f), uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
 
-            for (int i = 0; i < maxHearts; ++i) {
-                ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
-                ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
-                if (i < fullHearts) {
-                    fgDl->AddImage(texID, pMin, pMax, uvFull0, uvFull1);
-                } else if (i == fullHearts && partialHeart > 0.0f) {
-                    ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
-                    ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
-                    fgDl->AddImage(texID, pMin, splitX, uvFull0, uvFull1);
-                    fgDl->AddImage(texID, splitX1, pMax, uvEmpty0, uvEmpty1);
-                } else {
-                    fgDl->AddImage(texID, pMin, pMax, uvEmpty0, uvEmpty1);
+                for (int i = 0; i < maxHearts; ++i) {
+                    ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
+                    ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
+                    if (i < fullHearts) {
+                        drawList->AddImage(texID, pMin, pMax, uvFull0, uvFull1);
+                    } else if (i == fullHearts && partialHeart > 0.0f) {
+                        ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
+                        ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
+                        drawList->AddImage(texID, pMin, splitX, uvFull0, uvFull1);
+                        drawList->AddImage(texID, splitX1, pMax, uvEmpty0, uvEmpty1);
+                    } else {
+                        drawList->AddImage(texID, pMin, pMax, uvEmpty0, uvEmpty1);
+                    }
                 }
             }
-        }
 
-        // 3. Draw Crosshair
-        ImDrawList* drawList = ImGui::GetForegroundDrawList();
-        ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
-        drawList->AddLine(ImVec2(center.x - 8, center.y), ImVec2(center.x + 8, center.y), IM_COL32(255, 255, 255, 220), 2.0f);
-        drawList->AddLine(ImVec2(center.x, center.y - 8), ImVec2(center.x, center.y + 8), IM_COL32(255, 255, 255, 220), 2.0f);
+            // 3. Draw Crosshair
+            ImVec2 center(displaySize.x * 0.5f, displaySize.y * 0.5f);
+            drawList->AddLine(ImVec2(center.x - 8, center.y), ImVec2(center.x + 8, center.y), IM_COL32(255, 255, 255, 220), 2.0f);
+            drawList->AddLine(ImVec2(center.x, center.y - 8), ImVec2(center.x, center.y + 8), IM_COL32(255, 255, 255, 220), 2.0f);
 
-        // 4. Objective Progress
-        if (player) {
-            float invH = 60.0f + 26.0f;
-            float heartH = 28.0f;
-            float objY = displaySize.y - invH - 16.0f - heartH - 12.0f - 26.0f;
-            char objBuf[128];
-            int days = timeSystem.getDaysPassed();
-            if (player->currentLevel == 1) {
-                std::snprintf(objBuf, sizeof(objBuf), "Level 1 | Enemies: %d / 2 | Days: %d / 3", player->enemiesKilled, days);
-            } else if (player->currentLevel == 2) {
-                std::snprintf(objBuf, sizeof(objBuf), "Level 2 | Enemies: %d / 5 | Days: %d / 5", player->enemiesKilled, days);
-            } else {
-                std::snprintf(objBuf, sizeof(objBuf), "Level %d | Free Play", player->currentLevel);
+            // 4. Objective Progress
+            if (player) {
+                float invH = 60.0f + 26.0f, heartH = 28.0f;
+                float objY = displaySize.y - invH - 16.0f - heartH - 12.0f - 26.0f;
+                char objBuf[128];
+                int days = timeSystem.getDaysPassed();
+                if (player->currentLevel == 1) {
+                    std::snprintf(objBuf, sizeof(objBuf), "Level 1 | Enemies: %d / 2 | Days: %d / 3", player->enemiesKilled, days);
+                } else if (player->currentLevel == 2) {
+                    std::snprintf(objBuf, sizeof(objBuf), "Level 2 | Enemies: %d / 5 | Days: %d / 5", player->enemiesKilled, days);
+                } else {
+                    std::snprintf(objBuf, sizeof(objBuf), "Level %d | Free Play", player->currentLevel);
+                }
+
+                ImVec2 objSize = ImGui::CalcTextSize(objBuf);
+                float objX = displaySize.x * 0.5f - objSize.x * 0.5f;
+                drawList->AddText(ImVec2(objX + 1, objY + 1), IM_COL32(0,0,0,180), objBuf);
+                drawList->AddText(ImVec2(objX, objY), IM_COL32(255, 220, 80, 255), objBuf);
+
+                if (player->foodCount > 0) {
+                    char foodBuf[32];
+                    std::snprintf(foodBuf, sizeof(foodBuf), "Food: %d (F to heal)", player->foodCount);
+                    ImVec2 foodSize = ImGui::CalcTextSize(foodBuf);
+                    float foodX = displaySize.x * 0.5f - foodSize.x * 0.5f;
+                    drawList->AddText(ImVec2(foodX + 1, objY - 22.0f + 1), IM_COL32(0,0,0,180), foodBuf);
+                    drawList->AddText(ImVec2(foodX, objY - 22.0f), IM_COL32(120, 255, 120, 255), foodBuf);
+                }
             }
 
-            ImVec2 objSize = ImGui::CalcTextSize(objBuf);
-            float objX = displaySize.x * 0.5f - objSize.x * 0.5f;
-            ImDrawList* fgdl = ImGui::GetForegroundDrawList();
-            fgdl->AddText(ImVec2(objX + 1, objY + 1), IM_COL32(0,0,0,180), objBuf);
-            fgdl->AddText(ImVec2(objX, objY), IM_COL32(255, 220, 80, 255), objBuf);
+            // 5. XP Bar
+            if (player) {
+                float xpBarWidth = 200.0f, xpBarHeight = 16.0f;
+                float xpBarX = displaySize.x - xpBarWidth - 16.0f, xpBarY = 16.0f;
+                float xpProgress = std::min(player->currentXP, 1.0f);
 
-            // Food count indicator
-            if (player->foodCount > 0) {
-                char foodBuf[32];
-                std::snprintf(foodBuf, sizeof(foodBuf), "Food: %d (F to heal)", player->foodCount);
-                ImVec2 foodSize = ImGui::CalcTextSize(foodBuf);
-                float foodX = displaySize.x * 0.5f - foodSize.x * 0.5f;
-                fgdl->AddText(ImVec2(foodX + 1, objY - 22.0f + 1), IM_COL32(0,0,0,180), foodBuf);
-                fgdl->AddText(ImVec2(foodX, objY - 22.0f), IM_COL32(120, 255, 120, 255), foodBuf);
+                ImU32 bgColor = IM_COL32(30, 30, 35, 220);
+                ImU32 fillColor = (player->level == 3) ? IM_COL32(0, 200, 150, 255) : IM_COL32(100, 200, 255, 255);
+
+                drawList->AddRectFilled(ImVec2(xpBarX, xpBarY), ImVec2(xpBarX + xpBarWidth, xpBarY + xpBarHeight), bgColor, 4.0f);
+                drawList->AddRectFilled(ImVec2(xpBarX, xpBarY), ImVec2(xpBarX + xpBarWidth * xpProgress, xpBarY + xpBarHeight), fillColor, 4.0f);
+                drawList->AddRect(ImVec2(xpBarX, xpBarY), ImVec2(xpBarX + xpBarWidth, xpBarY + xpBarHeight), IM_COL32(180, 180, 190, 255), 4.0f, ImDrawCornerFlags_All, 1.5f);
+
+                char levelText[32];
+                std::snprintf(levelText, sizeof(levelText), "Lv.%d", player->level);
+                ImVec2 textSize = ImGui::CalcTextSize(levelText);
+                drawList->AddText(ImVec2(xpBarX + xpBarWidth * 0.5f - textSize.x * 0.5f, xpBarY + xpBarHeight * 0.5f - textSize.y * 0.5f), IM_COL32_WHITE, levelText);
+            }
+
+            // 6. Level Up Notification
+            if (levelUpNotificationTime > 0.0f) {
+                char levelUpText[64];
+                std::snprintf(levelUpText, sizeof(levelUpText), "LEVEL UP! Lv.%d", displayedLevel);
+                ImFont *font = ImGui::GetIO().FontDefault;
+                float baseSize = font ? font->FontSize : 24.0f;
+                float scale = 2.5f;
+                float pulse = 1.0f + 0.1f * std::sin(levelUpNotificationTime * 8.0f);
+                float fontSize = baseSize * scale * pulse;
+
+                ImVec2 textPos((displaySize.x - 280.0f * pulse) * 0.5f, (displaySize.y - 60.0f * pulse) * 0.5f);
+                drawList->AddText(font, fontSize, ImVec2(textPos.x - 1, textPos.y - 1), IM_COL32(0, 80, 40, 255), levelUpText);
+                drawList->AddText(font, fontSize, ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 80, 40, 255), levelUpText);
+                drawList->AddText(font, fontSize, textPos, IM_COL32(50, 255, 100, 255), levelUpText);
+            }
+
+            // 7. Damage Flash Overlay
+            if (player && player->damageFlashTimer > 0) {
+                float alpha = glm::clamp(player->damageFlashTimer / 0.3f, 0.0f, 1.0f) * 0.35f;
+                ImU32 flashCol = IM_COL32(255, 0, 0, (int)(alpha * 255));
+                drawList->AddRectFilled(ImVec2(0, 0), ImVec2(displaySize.x, displaySize.y), flashCol);
             }
         }
-
-        // 5. Damage Flash Overlay
-        if (player && player->damageFlashTimer > 0) {
-            float alpha = glm::clamp(player->damageFlashTimer / 0.3f, 0.0f, 1.0f) * 0.35f;
-            ImU32 flashCol = IM_COL32(255, 0, 0, (int)(alpha * 255));
-            ImGui::GetForegroundDrawList()->AddRectFilled(
-                ImVec2(0, 0), ImVec2(displaySize.x, displaySize.y), flashCol);
-        }
-
-        // Game Over / Win overlays have been relocated to the menu system.
     }
 
     void onDraw(double deltaTime) override {
         our::Entity *playerEntity = findPlayerEntity();
         our::PlayerComponent* currentPlayer = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+        auto &keyboard = getApp()->getKeyboard();
 
         if (currentPlayer && currentPlayer->health <= 0.0f) {
             currentPlayer->health = 0.0f;
@@ -609,6 +952,13 @@ class Playstate : public our::State {
         if (meleeCooldown > 0.0f) {
             meleeCooldown -= (float)deltaTime;
             if (meleeCooldown < 0.0f) meleeCooldown = 0.0f;
+        }
+
+        // ── Inventory Toggle ──
+        if (keyboard.justPressed(GLFW_KEY_E)) {
+            isInventoryOpen = !isInventoryOpen;
+            if (isInventoryOpen) cameraController.exit();
+            else cameraController.enter(getApp());
         }
 
         // ── Level Progression Logic ──
@@ -642,16 +992,13 @@ class Playstate : public our::State {
 
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
+        npcMovementSystem.update(&engineWorld, (float)deltaTime);
 
         if (playerEntity) {
             if (currentPlayer) {
                 currentPlayer->timeSinceDamage += (float)deltaTime;
-                // Damage flash countdown
-                if (currentPlayer->damageFlashTimer > 0)
-                    currentPlayer->damageFlashTimer -= (float)deltaTime;
-                // Heal cooldown
-                if (currentPlayer->healCooldown > 0)
-                    currentPlayer->healCooldown -= (float)deltaTime;
+                if (currentPlayer->damageFlashTimer > 0) currentPlayer->damageFlashTimer -= (float)deltaTime;
+                if (currentPlayer->healCooldown > 0) currentPlayer->healCooldown -= (float)deltaTime;
             }
             streamChunksAroundPlayer(playerEntity->localTransform.position);
             updateFirstPersonRig(playerEntity, currentPlayer, (float)deltaTime);
@@ -661,7 +1008,29 @@ class Playstate : public our::State {
         lightSystem.update(&engineWorld, (float)deltaTime);
         timeSystem.update(&engineWorld, (float)deltaTime);
 
+        // Update level up notification timer
+        if (levelUpNotificationTime > 0.0f) levelUpNotificationTime -= (float)deltaTime;
+
+        // Level 1 XP increment
+        if (currentPlayer && currentPlayer->level == 1) {
+            int daysPassed = timeSystem.getDaysPassed();
+            if (daysPassed > currentPlayer->daysSurvived) {
+                int daysDiff = daysPassed - currentPlayer->daysSurvived;
+                currentPlayer->daysSurvived = daysPassed;
+                currentPlayer->currentXP += daysDiff * (1.0f / 3.0f);
+                if (currentPlayer->currentXP >= 1.0f) {
+                    currentPlayer->currentXP = 1.0f;
+                    currentPlayer->level = 2;
+                    currentPlayer->currentXP = 0.0f;
+                    levelUpNotificationTime = 3.0f;
+                    displayedLevel = 2;
+                    our::AudioSystem::playSound("assets/sounds/levelup.wav");
+                }
+            }
+        }
+
         blockInteraction.update((float)deltaTime, &engineWorld);
+        
         if (playerEntity) {
             enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
         }
@@ -673,7 +1042,6 @@ class Playstate : public our::State {
                 currentPlayer->gameState = our::GameState::WIN;
                 currentPlayer->hasReachedPortal = true;
             }
-            // Portal bobbing animation
             static float portalTime = 0.0f;
             portalTime += (float)deltaTime;
             portalEntity->localTransform.rotation.y += (float)deltaTime * 2.0f;
@@ -681,7 +1049,7 @@ class Playstate : public our::State {
         }
 
         // ── Food healing (F key) ──
-        if (currentPlayer && getApp()->getKeyboard().justPressed(GLFW_KEY_F)) {
+        if (currentPlayer && keyboard.justPressed(GLFW_KEY_F)) {
             if (currentPlayer->foodCount > 0 && currentPlayer->healCooldown <= 0 &&
                 currentPlayer->health < currentPlayer->maxHealth) {
                 currentPlayer->foodCount--;
@@ -690,33 +1058,30 @@ class Playstate : public our::State {
             }
         }
 
-        // Handle water damage
-        our::PlayerComponent* player = nullptr;
-        if (playerEntity) {
-            player = playerEntity->getComponent<our::PlayerComponent>();
-        }
-        if (player) {
-            float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
+        // Handle water damage and sound
+        if (currentPlayer) {
+            float targetVolume = currentPlayer->isUnderwater ? 0.2f : 1.0f;
             our::AudioSystem::setGlobalVolume(targetVolume);
 
-            if (player->isUnderwater) {
-                player->waterDamageTimer += (float)deltaTime;
-                while (player->waterDamageTimer >= player->waterDamageInterval) {
-                    player->health -= player->waterDamageAmount;
-                    player->waterDamageTimer -= player->waterDamageInterval;
+            if (currentPlayer->isUnderwater) {
+                currentPlayer->waterDamageTimer += (float)deltaTime;
+                while (currentPlayer->waterDamageTimer >= currentPlayer->waterDamageInterval) {
+                    currentPlayer->health -= currentPlayer->waterDamageAmount;
+                    currentPlayer->shakeTimer = 0.5f;
+                    currentPlayer->shakeIntensity = 0.2f;
+                    currentPlayer->waterDamageTimer -= currentPlayer->waterDamageInterval;
                     
-                    if (player->health <= 0.0f) {
-                        player->health = 0.0f;
-                        player->isAlive = false;
-                        player->gameState = our::GameState::LOSE;
+                    if (currentPlayer->health <= 0.0f) {
+                        currentPlayer->health = 0.0f;
+                        currentPlayer->isAlive = false;
+                        currentPlayer->gameState = our::GameState::LOSE;
                         break;
                     }
                 }
-            } else if (player->waterDamageTimer > 0.0f) {
-                player->waterDamageTimer = 0.0f;
+            } else if (currentPlayer->waterDamageTimer > 0.0f) {
+                currentPlayer->waterDamageTimer = 0.0f;
             }
 
-            // Dynamic ambient sound based on distance to nearest water
             float maxRadius = 10.0f;
             float minDistanceSq = maxRadius * maxRadius;
             bool waterFound = false;
@@ -748,16 +1113,20 @@ class Playstate : public our::State {
             }
             our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
         }
-        
+
         auto &mouse = getApp()->getMouse();
         if (playerEntity) {
             glm::mat4 camMat = playerEntity->localTransform.toMat4();
             glm::vec3 camPos = playerEntity->localTransform.position;
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
-            our::PlayerComponent* player = playerEntity->getComponent<our::PlayerComponent>();
+
+            bool triggerHitPulse = false;
+            if (mouse.justPressed(0) || mouse.justPressed(1)) {
+                triggerHitPulse = true;
+            }
 
             // Highlight Hovered Block
-            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir);
+            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, 2.0f);
             if (hoverHit.hit && highlightEntity && highlightEdgesEntity) {
                 glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
                 highlightEntity->localTransform.position = pos;
@@ -767,69 +1136,107 @@ class Playstate : public our::State {
                 if (highlightEdgesEntity) highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
             }
 
-            // Break Block (disabled underwater)
-            if (mouse.isPressed(0) && player && !player->isUnderwater) {
+            // Attack / Break
+            if (mouse.justPressed(0) && currentPlayer && !currentPlayer->isUnderwater && !isInventoryOpen) {
                 if (!tryMeleeAttack(camPos, camDir)) {
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
-                    if (hit.hit) {
-                        int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                        bool blockBroken = blockInteraction.processHold(
-                            hit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime
-                        );
-
-                        if (blockBroken) {
-                            // The block was completely broken
-                            our::AudioSystem::playSound("assets/sounds/Hit.wav");
-
-                            if (player) {
-                                registerCollectedBlock(player, type);
-                                // LEAF blocks give food
-                                if (type == voxel::LEAF) {
-                                    player->foodCount++;
-                                }
-                            }
-                        } else if (mouse.justPressed(0)) {
-                            // The block was hit but not broken
-                            if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
-                            else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
-                            else if (type == voxel::SAND) our::AudioSystem::playSound("assets/sounds/Sand.wav");
-                            else if (type == voxel::STONE) our::AudioSystem::playSound("assets/sounds/Stone.wav");
-                            else if (type == voxel::Glass) our::AudioSystem::playSound("assets/sounds/Glass.wav");
-                            else if (type == voxel::WOOD) our::AudioSystem::playSound("assets/sounds/Wood.wav");
-                            else our::AudioSystem::playSound("assets/sounds/Hit.wav");
-                        }
+                    our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f);
+                    if (hitNPC) {
+                        killNPCAndAwardMeat(hitNPC, currentPlayer);
+                        our::AudioSystem::playSound("assets/sounds/Death.wav");
                     }
                 }
             }
-            if (mouse.justReleased(0)) {
+
+            if (mouse.isPressed(0) && currentPlayer && !currentPlayer->isUnderwater && !isInventoryOpen) {
+                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                if (hit.hit) {
+                    int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
+                    auto holdResult = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime);
+                    if (holdResult == BlockInteractionSystem::HoldResult::Broken) {
+                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                        registerCollectedBlock(currentPlayer, type);
+                        if (type == voxel::LEAF) currentPlayer->foodCount++;
+                    } else if (holdResult == BlockInteractionSystem::HoldResult::HitPulse) {
+                        triggerHitPulse = true;
+                        if (type == voxel::GRASS) our::AudioSystem::playSound("assets/sounds/Grass.wav");
+                        else if (type == voxel::DIRT) our::AudioSystem::playSound("assets/sounds/Dirt.wav");
+                        else if (type == voxel::SAND) our::AudioSystem::playSound("assets/sounds/Sand.wav");
+                        else if (type == voxel::STONE) our::AudioSystem::playSound("assets/sounds/Stone.wav");
+                        else if (type == voxel::Glass) our::AudioSystem::playSound("assets/sounds/Glass.wav");
+                        else if (type == voxel::WOOD || type == voxel::LOG) our::AudioSystem::playSound("assets/sounds/Wood.wav");
+                        else our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                    }
+                }
+            } else if (mouse.justReleased(0)) {
                 blockInteraction.currentTargetContext = {-1, -1, -1};
                 blockInteraction.accumulatedBreakTime = 0.0f;
                 blockInteraction.particleSpawnTimer = 0.0f;
             }
-            // Place Block (disabled underwater)
-            if (mouse.justPressed(1) && player && !player->isUnderwater) {
-                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir);
-                int placeType = hotbarBlockType(player->inventoryHotbarSlot);
-                int* stack = inventoryCountForType(player, placeType);
+
+            // Place Block
+            if (mouse.justPressed(1) && currentPlayer && !currentPlayer->isUnderwater && !isInventoryOpen) {
+                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                int placeType = hotbarBlockType(currentPlayer->inventoryHotbarSlot);
+                int* stack = inventoryCountForType(currentPlayer, placeType);
                 if (hit.hit && stack && *stack > 0) {
                     terrainWorld.placeBlock(hit, placeType);
                     (*stack)--;
                     terrainMeshDirty = true;
                 }
             }
+
+            // Hand Animation & Interaction Update
+            our::Entity *handEntity = nullptr;
+            our::HandComponent *handComp = nullptr;
+
+            for (auto entity : engineWorld.getEntities()) {
+                if (entity && entity->name == "player_hand") {
+                    handEntity = entity;
+                    handEntity->localTransform.scale = glm::vec3(0.15f, 0.2f, 0.1f);
+                    handComp = entity->getComponent<our::HandComponent>();
+                    break;
+                }
+            }
+
+            if (handEntity && handComp) {
+                float interactRange = handComp->interactionRange;
+                voxel::RayHit localHoverHit = terrainWorld.castRay(camPos, camDir, interactRange);
+                our::Entity *localHoverNPC = findHitNPC(camPos, camDir, interactRange);
+
+                bool targetInRange = false;
+                glm::vec3 targetPos(0.0f);
+
+                if (localHoverNPC) {
+                    targetInRange = true;
+                    targetPos = localHoverNPC->localTransform.position;
+                } else if (localHoverHit.hit) {
+                    targetInRange = true;
+                    targetPos = glm::vec3(localHoverHit.x + 0.5f, localHoverHit.y + 0.5f, localHoverHit.z + 0.5f);
+                }
+
+                our::HandSystem::update(
+                    handEntity, handComp, camPos, camDir, camMat, deltaTime,
+                    triggerHitPulse, targetInRange, targetPos, &terrainWorld
+                );
+            }
         }
 
         if (terrainMeshDirty) rebuildMesh();
-        renderer.render(&engineWorld);
+        
+        // Stop rendering main game logic if inventory is overlaid
+        if (isInventoryOpen) {
+            renderer.render(&engineWorld);
+            return; 
+        }
 
-        // Delete particles or hit blocks that have expired outside of chunk builds
+        renderer.render(&engineWorld);
         engineWorld.deleteMarkedEntities();
 
-        if (getApp()->getKeyboard().justPressed(GLFW_KEY_ESCAPE)) getApp()->changeState("menu");
+        if (keyboard.justPressed(GLFW_KEY_ESCAPE)) getApp()->changeState("menu");
     }
 
     void onKeyEvent(int key, int scancode, int action, int mods) override {
-        if (action != GLFW_PRESS) return;
+        if (action != GLFW_PRESS || isInventoryOpen) return;
         our::Entity* playerEntity = findPlayerEntity();
         our::PlayerComponent* player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
         if (!player) return;
@@ -837,6 +1244,7 @@ class Playstate : public our::State {
     }
 
     void onScrollEvent(double x, double y) override {
+        if (isInventoryOpen) return;
         our::Entity* playerEntity = findPlayerEntity();
         our::PlayerComponent* player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
         if (!player || y == 0) return;

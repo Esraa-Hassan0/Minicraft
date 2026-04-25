@@ -49,12 +49,25 @@
                 "enemy-zombie-tex":   "assets/textures/zombie.png",
                 "enemy-skeleton-tex": "assets/textures/skeleton.png",
                 "enemy-creeper-tex":  "assets/textures/creeper.png"
+                "meats": "assets/textures/meat_rbg.png",
+                "pig": "assets/textures/pig.png",
+                "chicken": "assets/textures/chicken.png",
+                "horse": "assets/textures/horse.png",
+                "log": "assets/texture/log.png",
+                "leaf": "assets/texture/leaf.png",
+                "hand": "assets/textures/right_hand.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
                 "monkey": "assets/models/monkey.obj",
                 "plane": "assets/models/plane.obj",
                 "sphere": "assets/models/sphere.obj"
+                "rightHand": "assets/models/Rectangle.obj",
+                "sphere": "assets/models/sphere.obj",
+                "cow": "assets/models/cow.obj",
+                "pig": "assets/models/pig.obj",
+                "chicken": "assets/models/chicken.obj",
+                "horse": "assets/models/horse.obj"
             },
             "samplers": {
                 "default": {},
@@ -345,9 +358,43 @@
                         "faceCulling": { "enabled": false },
                         "depthTesting": { "enabled": true }
                     },
-                    "tint": [1, 1, 1, 1],
                     "texture": "enemy-creeper-tex",
-                    "sampler": "pixelated"
+                    "sampler": "pixelated",
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
+                },
+                "hand-material": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        },
+                        "blending": {
+                            "enabled": true,
+                            "sourceFactor": "GL_SRC_ALPHA",
+                            "destinationFactor": "GL_ONE_MINUS_SRC_ALPHA"
+                        }
+                    },
+                    "transparent": true,
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "texture": "hand",
+                    "sampler": "default",
+                    "specular": [0.1, 0.1, 0.1],
+                    "shininess": 4.0
                 }
             }
         },
@@ -401,7 +448,280 @@
                         "halfSize": [0.3, 0.9, 0.3],
                         "center": [0, -0.9, 0]
                     }
+                ],
+                "children": [
+                    {
+                        "name": "player_hand",
+                        "position": [ 0.38, -0.38, -0.6 ],
+                        "rotation": [ 110, -15, -20 ],
+                        "scale": [ 1.0, 1.0, 1.0 ],
+                        "components": [
+                            {
+                                "type": "Mesh Renderer",
+                                "mesh": "rightHand",
+                                "material": "hand-material"
+                            },
+                            {
+                                "type": "Hand",
+                                "basePosition": [ 0.38, -0.5, -2.0 ],
+                                "baseRotation": [ 110, -15, -20 ],
+                                "interactionRange": 2.0,
+                                "idleSwayAmplitude": 0.01,
+                                "hitForwardThrust": 0.15
+                            }
+                        ]
+                    }
                 ]
+            }
+        ],
+        "npcTypes": [
+            {
+                "mesh": "pig",
+                "material": "pig-mat",
+                "scale": [
+                    0.05,
+                    0.05,
+                    0.05
+                ],
+                "components": {
+                    "foodReward": 3,
+                    "npcType": "pig",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.4,
+                            0.25,
+                            0.4
+                        ],
+                        "center": [
+                            0.0,
+                            -0.15,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.0,
+                    "moveRadius": 5.0,
+                    "waitTime": 2.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "chicken",
+                "material": "chicken-mat",
+                "scale": [
+                    0.04,
+                    0.04,
+                    0.04
+                ],
+                "components": {
+                    "foodReward": 1,
+                    "npcType": "chicken",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.2,
+                            0.2,
+                            0.2
+                        ],
+                        "center": [
+                            0.0,
+                            -0.1,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 3.0,
+                    "moveRadius": 8.0,
+                    "waitTime": 1.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "cow",
+                "material": "cow-mat",
+                "scale": [
+                    0.06,
+                    0.06,
+                    0.06
+                ],
+                "components": {
+                    "foodReward": 3,
+                    "npcType": "cow",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.5,
+                            0.3,
+                            0.5
+                        ],
+                        "center": [
+                            0.0,
+                            -0.72,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 1.5,
+                    "moveRadius": 4.0,
+                    "waitTime": 3.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "sheep",
+                "material": "sheep-mat",
+                "scale": [
+                    0.05,
+                    0.05,
+                    0.05
+                ],
+                "components": {
+                    "foodReward": 2,
+                    "npcType": "sheep",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.2,
+                            0.25,
+                            0.2
+                        ],
+                        "center": [
+                            0.0,
+                            0.25,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.0,
+                    "moveRadius": 6.0,
+                    "waitTime": 2.0,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "bee",
+                "material": "bee-mat",
+                "scale": [
+                    0.03,
+                    0.03,
+                    0.03
+                ],
+                "components": {
+                    "foodReward": 1,
+                    "npcType": "bee",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.1,
+                            0.1,
+                            0.1
+                        ],
+                        "center": [
+                            0.0,
+                            -1.793,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 4.0,
+                    "moveRadius": 10.0,
+                    "waitTime": 0.5,
+                    "movementType": "follow_player"
+                }
+            },
+            {
+                "mesh": "cat",
+                "material": "cat-mat",
+                "scale": [
+                    0.045,
+                    0.045,
+                    0.045
+                ],
+                "components": {
+                    "foodReward": 2,
+                    "npcType": "cat",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.15,
+                            0.2,
+                            0.15
+                        ],
+                        "center": [
+                            0.0,
+                            0.2,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.5,
+                    "moveRadius": 7.0,
+                    "waitTime": 1.5,
+                    "movementType": "random_walk"
+                }
+            },
+            {
+                "mesh": "frog",
+                "material": "frog-mat",
+                "scale": [
+                    0.04,
+                    0.04,
+                    0.04
+                ],
+                "components": {
+                    "foodReward": 1,
+                    "npcType": "frog",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.15,
+                            0.15,
+                            0.15
+                        ],
+                        "center": [
+                            0.0,
+                            0.15,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 2.0,
+                    "moveRadius": 3.0,
+                    "waitTime": 4.0,
+                    "movementType": "patrol"
+                }
+            },
+            {
+                "mesh": "cube",
+                "material": "chest-mat",
+                "scale": [
+                    0.15,
+                    0.12,
+                    0.15
+                ],
+                "components": {
+                    "foodReward": 5,
+                    "npcType": "chest",
+                    "AABBCollider": {
+                        "halfSize": [
+                            0.5,
+                            0.4,
+                            0.5
+                        ],
+                        "center": [
+                            0.0,
+                            0.28,
+                            0.0
+                        ]
+                    }
+                },
+                "movement": {
+                    "speed": 0.0,
+                    "moveRadius": 0.0,
+                    "waitTime": 0.0,
+                    "movementType": "idle"
+                }
             }
         ]
     }

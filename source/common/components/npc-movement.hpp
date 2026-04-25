@@ -20,6 +20,12 @@ namespace our
         glm::vec3 velocity = glm::vec3(0.0f);
         bool isGrounded = false;
 
+        // Jump configuration
+        float jumpForce = 8.0f;
+        float jumpCooldown = 2.0f; // seconds between opportunistic jumps
+        float jumpTimer = 0.0f;
+        float jumpProbability = 0.05f; // chance per cooldown to perform a jump
+
         // Set to true by the movement system on the first frame so that
         // startPosition / targetPosition are seeded from the entity's actual
         // world position rather than the (0,0,0) default.
