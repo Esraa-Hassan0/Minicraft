@@ -99,6 +99,10 @@ class Playstate : public our::State
     float levelUpNotificationTime = 0.0f;
     int displayedLevel = 1;
 
+    // Level target notification
+    float levelTargetPopupTime = 0.0f;
+    int currentLevelTarget = 0;
+
     static int hotbarBlockType(int slot)
     {
         static const int types[kHotbarSlots] = {
@@ -1066,6 +1070,64 @@ class Playstate : public our::State
             drawList->AddText(ImVec2(xpBarX + xpBarWidth * 0.5f - textSize.x * 0.5f, xpBarY + xpBarHeight * 0.5f - textSize.y * 0.5f), IM_COL32_WHITE, levelText);
         }
 
+        // Level Target Popup Notification
+        if (levelTargetPopupTime > 0.0f && currentLevelTarget > 0)
+        {
+            ImDrawList *drawList = ImGui::GetForegroundDrawList();
+            
+            float offsetY = 0.0f;
+            if (levelTargetPopupTime > 4.5f) {
+                // Slide in from top
+                offsetY = -150.0f * (levelTargetPopupTime - 4.5f) / 0.5f;
+            } else if (levelTargetPopupTime < 0.5f) {
+                // Slide out to top
+                offsetY = -150.0f * (0.5f - levelTargetPopupTime) / 0.5f;
+            }
+
+            ImVec2 popupPos(16.0f, 16.0f + offsetY);
+            ImVec2 popupSize(280.0f, 68.0f);
+            
+            ImU32 bgColor = IM_COL32(33, 33, 33, 240);
+            ImU32 borderColor = IM_COL32(90, 100, 110, 255);
+            drawList->AddRectFilled(popupPos, ImVec2(popupPos.x + popupSize.x, popupPos.y + popupSize.y), bgColor, 8.0f);
+            drawList->AddRect(popupPos, ImVec2(popupPos.x + popupSize.x, popupPos.y + popupSize.y), borderColor, 8.0f, ImDrawCornerFlags_All, 2.0f);
+            
+            std::string title = "Level " + std::to_string(currentLevelTarget);
+            std::string goal = "";
+            our::Texture2D *iconTex = nullptr;
+
+            if (currentLevelTarget == 1) {
+                goal = "Goal: Survive 3 days";
+                iconTex = our::AssetLoader<our::Texture2D>::get("meats"); 
+            } else if (currentLevelTarget == 2) {
+                goal = "Goal: Kill 4 enemies";
+                iconTex = our::AssetLoader<our::Texture2D>::get("hearts");
+            } else if (currentLevelTarget >= 3) {
+                goal = "Goal: Get one diamond";
+                // diamond block texture could be added here if available
+            }
+            
+            ImVec2 textPos = ImVec2(popupPos.x + 64.0f, popupPos.y + 12.0f);
+            ImVec2 iconPosMin = ImVec2(popupPos.x + 16.0f, popupPos.y + 18.0f);
+            ImVec2 iconPosMax = ImVec2(popupPos.x + 48.0f, popupPos.y + 50.0f);
+            
+            if (iconTex) {
+                float texW = 45.0f;
+                // Specific UVs for hearts/meats sprite sheet
+                ImVec2 uv0 = ImVec2((27.0f + 0.5f) / texW, 1.0f);
+                ImVec2 uv1 = ImVec2((36.0f - 0.5f) / texW, 0.0f);
+                
+                ImTextureID texID = (ImTextureID)(intptr_t)iconTex->getOpenGLName();
+                drawList->AddImage(texID, iconPosMin, iconPosMax, uv0, uv1);
+            } else {
+                drawList->AddRectFilled(iconPosMin, iconPosMax, IM_COL32(0, 200, 200, 255), 4.0f);
+            }
+
+            ImFont* font = ImGui::GetIO().FontDefault;
+            drawList->AddText(font, 18.0f, textPos, IM_COL32(255, 255, 80, 255), title.c_str());
+            drawList->AddText(font, 16.0f, ImVec2(textPos.x, textPos.y + 24.0f), IM_COL32(230, 230, 230, 255), goal.c_str());
+        }
+
         // Level Up Notification
         if (levelUpNotificationTime > 0.0f)
         {
@@ -1104,11 +1166,19 @@ class Playstate : public our::State
         if (playerEntity)
         {
             player = playerEntity->getComponent<our::PlayerComponent>();
+            if (player && player->level > currentLevelTarget) {
+                currentLevelTarget = player->level;
+                levelTargetPopupTime = 5.0f;
+                our::AudioSystem::playSound("assets/sounds/Notification.wav");
+            }
         }
 
         // Update level up notification timer
         if (levelUpNotificationTime > 0.0f)
             levelUpNotificationTime -= (float)deltaTime;
+
+        if (levelTargetPopupTime > 0.0f)
+            levelTargetPopupTime -= (float)deltaTime;
 
         // Level 1: XP increases by 1/3 every day
         if (player && player->level == 1)
