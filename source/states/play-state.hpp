@@ -13,6 +13,7 @@
 #include <systems/block-interaction.hpp>
 #include <systems/npc-movement-system.hpp>
 #include <systems/hand-system.hpp>
+#include <systems/enemy-system.hpp>
 #include <asset-loader.hpp>
 #include <texture/texture2d.hpp>
 #include <voxel/world.hpp>
@@ -21,6 +22,7 @@
 #include <components/killable-npc.hpp>
 #include <components/npc-movement.hpp>
 #include <components/hand.hpp>
+#include <components/enemy-component.hpp>
 #include <audio/audio.hpp>
 #include <unordered_map>
 #include <vector>
@@ -72,6 +74,7 @@ class Playstate : public our::State
     our::LightSystem lightSystem;
     our::TimeSystem timeSystem;
     our::NPCMovementSystem npcMovementSystem;
+    our::EnemySystem enemySystem;
     our::Entity *highlightEntity = nullptr;      // Semi-transparent fill
     our::Entity *highlightEdgesEntity = nullptr; // Clean square borders
     our::Mesh *highlightEdgesMesh = nullptr;     // Line-based mesh for borders
@@ -403,6 +406,22 @@ class Playstate : public our::State
         dl->AddRect(iconMin, iconMax, outline, 4.0f, ImDrawCornerFlags_All, 1.25f);
     }
 
+    void awardLevel2KillXP(our::PlayerComponent *player)
+    {
+        if (!player || player->level != 2)
+            return;
+
+        player->currentXP += 1.0f / 4.0f;
+        if (player->currentXP >= 1.0f)
+        {
+            player->level = 3;
+            player->currentXP = 0.0f;
+            levelUpNotificationTime = 3.0f;
+            displayedLevel = 3;
+            our::AudioSystem::playSound("assets/sounds/levelup.wav");
+        }
+    }
+
     void killNPCAndAwardMeat(our::Entity *npcEntity, our::PlayerComponent *player)
     {
         if (!npcEntity || !player)
@@ -420,22 +439,39 @@ class Playstate : public our::State
                 // Original behavior for other NPCs (increase meat count)
                 player->meatCount += killable->foodReward;
 
-                // Level 2: Add 1/4 XP per enemy killed
-                if (player->level == 2)
-                {
-                    player->currentXP += 1.0f / 4.0f;
-                    if (player->currentXP >= 1.0f)
-                    {
-                        player->level = 3;
-                        player->currentXP = 0.0f;
-                        levelUpNotificationTime = 3.0f;
-                        displayedLevel = 3;
-                        our::AudioSystem::playSound("assets/sounds/levelup.wav");
-                    }
-                }
+                awardLevel2KillXP(player);
             }
         }
         engineWorld.markForRemoval(npcEntity);
+    }
+
+    bool damageEnemyAndAwardXP(our::Entity *enemyEntity, our::PlayerComponent *player)
+    {
+        if (!enemyEntity || !player)
+            return false;
+
+        auto *enemy = enemyEntity->getComponent<our::EnemyComponent>();
+        if (!enemy || enemy->state == our::EnemyState::DEAD)
+            return false;
+
+        enemy->health -= 10.0f;
+        enemy->hurtFlashTimer = enemy->hurtFlashDuration;
+
+        if (enemy->health <= 0.0f)
+        {
+            enemy->health = 0.0f;
+            enemy->state = our::EnemyState::DEAD;
+            enemy->deadTimer = 0.0f;
+            enemy->velocity = glm::vec3(0.0f);
+            awardLevel2KillXP(player);
+            our::AudioSystem::playSound("assets/sounds/Death.wav");
+        }
+        else
+        {
+            our::AudioSystem::playSound("assets/sounds/Hit.wav");
+        }
+
+        return true;
     }
 
     our::Entity *findHitNPC(const glm::vec3 &camPos, const glm::vec3 &camDir, float maxDist)
@@ -469,6 +505,40 @@ class Playstate : public our::State
             }
         }
         return closestNPC;
+    }
+
+    our::Entity *findHitEnemy(const glm::vec3 &camPos, const glm::vec3 &camDir, float maxDist)
+    {
+        float closestDist = maxDist;
+        our::Entity *closestEnemy = nullptr;
+
+        for (auto entity : engineWorld.getEntities())
+        {
+            if (!entity)
+                continue;
+
+            auto *enemy = entity->getComponent<our::EnemyComponent>();
+            if (!enemy || enemy->state == our::EnemyState::DEAD)
+                continue;
+
+            glm::vec3 enemyCenter = entity->localTransform.position + enemy->colliderCenter;
+            glm::vec3 toEnemy = enemyCenter - camPos;
+            float t = glm::dot(toEnemy, camDir);
+            if (t < 0.0f || t > closestDist)
+                continue;
+
+            glm::vec3 closestPoint = camPos + camDir * t;
+            glm::vec3 diff = closestPoint - enemyCenter;
+            float radius = std::max(enemy->colliderHalfSize.x, std::max(enemy->colliderHalfSize.y, enemy->colliderHalfSize.z)) + 0.2f;
+
+            if (glm::dot(diff, diff) <= radius * radius)
+            {
+                closestDist = t;
+                closestEnemy = entity;
+            }
+        }
+
+        return closestEnemy;
     }
 
     void updateMeatDecay(our::PlayerComponent *player, float deltaTime)
@@ -790,6 +860,7 @@ class Playstate : public our::State
         highlightEdgesEntity->localTransform.scale = glm::vec3(0.505f); // Slightly larger than the fill to avoid z-fighting
 
         blockInteraction.initialize(&engineWorld);
+        enemySystem.initialize();
         our::AudioSystem::startLoopingSound("water_ambient", "assets/sounds/water_flowing.wav");
         our::AudioSystem::setLoopingSoundVolume("water_ambient", 0.0f);
 
@@ -1147,6 +1218,8 @@ class Playstate : public our::State
             drawList->AddText(font, fontSize, ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 80, 40, 255), levelUpText);
             drawList->AddText(font, fontSize, textPos, IM_COL32(50, 255, 100, 255), levelUpText);
         }
+
+        enemySystem.drawGameOverlay(&engineWorld);
     }
 
     void onDraw(double deltaTime) override
@@ -1161,6 +1234,9 @@ class Playstate : public our::State
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
         timeSystem.update(&engineWorld, (float)deltaTime);
+
+        if (playerEntity)
+            enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
 
         our::PlayerComponent *player = nullptr;
         if (playerEntity)
@@ -1326,8 +1402,13 @@ class Playstate : public our::State
             // Break Block / Kill NPC (disabled underwater)
             if (mouse.justPressed(0) && player && !player->isUnderwater)
             {
-                our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f);
-                if (hitNPC)
+                our::Entity *hitEnemy = findHitEnemy(camPos, camDir, 2.5f);
+                if (hitEnemy)
+                {
+                    damageEnemyAndAwardXP(hitEnemy, player);
+                    triggerHitPulse = true;
+                }
+                else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
                 {
                     killNPCAndAwardMeat(hitNPC, player);
                     our::AudioSystem::playSound("assets/sounds/Death.wav");
@@ -1433,12 +1514,19 @@ class Playstate : public our::State
                 // Detect targets within interaction range
                 float interactRange = handComp->interactionRange;
                 voxel::RayHit localHoverHit = terrainWorld.castRay(camPos, camDir, interactRange);
+                our::Entity *localHoverEnemy = findHitEnemy(camPos, camDir, interactRange);
                 our::Entity *localHoverNPC = findHitNPC(camPos, camDir, interactRange);
 
                 bool targetInRange = false;
                 glm::vec3 targetPos(0.0f);
 
-                if (localHoverNPC)
+                if (localHoverEnemy)
+                {
+                    targetInRange = true;
+                    auto *enemy = localHoverEnemy->getComponent<our::EnemyComponent>();
+                    targetPos = localHoverEnemy->localTransform.position + (enemy ? enemy->colliderCenter : glm::vec3(0.0f));
+                }
+                else if (localHoverNPC)
                 {
                     targetInRange = true;
                     targetPos = localHoverNPC->localTransform.position;
@@ -1510,6 +1598,7 @@ class Playstate : public our::State
         our::AudioSystem::stopLoopingSound("water_ambient");
         clearAllChunkRenderGroups();
         engineWorld.deleteMarkedEntities();
+        enemySystem.destroy();
         renderer.destroy();
         cameraController.exit();
         playerController.exit();

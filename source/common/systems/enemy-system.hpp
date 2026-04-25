@@ -96,6 +96,7 @@ public:
 
         auto* player = playerEntity->getComponent<PlayerComponent>();
         if (!player) return;
+        player->timeSinceDamage += dt;
 
         // If game is already over, skip AI
         if (player->gameState != GameState::PLAYING) return;
@@ -924,7 +925,8 @@ private:
     void dealDamageToPlayer(PlayerComponent* player, float damage, bool bypassRecovery = false) {
         if (!bypassRecovery && player->timeSinceDamage < player->damageRecoveryTime) return;
         player->timeSinceDamage = 0.0f;
-        player->damageFlashTimer = 0.3f;  // Red flash for 0.3s
+        player->shakeTimer = 0.3f;
+        player->shakeIntensity = 0.2f;
         player->health -= damage;
         if (player->health <= 0.0f) {
             player->health    = 0.0f;

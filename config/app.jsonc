@@ -50,9 +50,16 @@
                 "pig": "assets/textures/pig.png",
                 "chicken": "assets/textures/chicken.png",
                 "horse": "assets/textures/horse.png",
-                "log": "assets/texture/log.png",
-                "leaf": "assets/texture/leaf.png",
-                "hand": "assets/textures/right_hand.png"
+                "cow": "assets/textures/cow.png",
+                "sheep": "assets/textures/sheep.png",
+                "cat": "assets/textures/cat.png",
+                "frog": "assets/textures/frog.png",
+                "log": "assets/textures/log.png",
+                "leaf": "assets/textures/leaf.png",
+                "hand": "assets/textures/right_hand.png",
+                "enemy-zombie-tex": "assets/textures/zombie.png",
+                "enemy-skeleton-tex": "assets/textures/skeleton.png",
+                "enemy-creeper-tex": "assets/textures/creeper.png"
             },
             "meshes": {
                 "cube": "assets/models/cube.obj",
@@ -63,7 +70,10 @@
                 "cow": "assets/models/cow.obj",
                 "pig": "assets/models/pig.obj",
                 "chicken": "assets/models/chicken.obj",
-                "horse": "assets/models/horse.obj"
+                "horse": "assets/models/horse.obj",
+                "sheep": "assets/models/sheep.obj",
+                "cat": "assets/models/cat.obj",
+                "frog": "assets/models/frog.obj"
             },
             "samplers": {
                 "default": {},
@@ -356,7 +366,7 @@
                     "sampler": "pixelated"
                 },
                 "log":{
-                    "type":"tinted",
+                    "type":"textured",
                     "shader": "textured",
                     "pipelineState": {
                         "faceCulling": {
@@ -366,11 +376,12 @@
                             "enabled": true
                         }
                     },
+                    "tint": [1.0, 1.0, 1.0, 1.0],
                     "texture": "log",
-                    "sampler": "default"
+                    "sampler": "pixelated"
                 },
                 "leaf":{
-                    "type":"tinted",
+                    "type":"textured",
                     "shader": "textured",
                     "pipelineState": {
                         "faceCulling": {
@@ -380,6 +391,7 @@
                             "enabled": true
                         }
                     },
+                    "tint": [1.0, 1.0, 1.0, 1.0],
                     "texture": "leaf",
                     "sampler": "pixelated"
                 },
@@ -526,6 +538,7 @@
                     },
                     "texture": "pig",
                     "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         1.0,
                         1.0,
@@ -552,6 +565,7 @@
                     },
                     "texture": "chicken",
                     "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         1.0,
                         1.0,
@@ -576,8 +590,9 @@
                             "enabled": true
                         }
                     },
-                    "texture": "horse",
+                    "texture": "cow",
                     "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         1.0,
                         1.0,
@@ -602,8 +617,9 @@
                             "enabled": true
                         }
                     },
-                    "texture": "brown_wool",
+                    "texture": "sheep",
                     "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         1.0,
                         1.0,
@@ -628,6 +644,8 @@
                             "enabled": true
                         }
                     },
+                    "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         1.0,
                         0.85,
@@ -652,6 +670,9 @@
                             "enabled": true
                         }
                     },
+                    "texture": "cat",
+                    "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         0.9,
                         0.6,
@@ -676,6 +697,9 @@
                             "enabled": true
                         }
                     },
+                    "texture": "frog",
+                    "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
                     "tint": [
                         0.2,
                         0.65,
@@ -737,6 +761,57 @@
                     "sampler": "default",
                     "specular": [0.1, 0.1, 0.1],
                     "shininess": 4.0
+                },
+                "enemy-zombie": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "texture": "enemy-zombie-tex",
+                    "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "specular": [0.0, 0.0, 0.0],
+                    "shininess": 1.0
+                },
+                "enemy-skeleton": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "texture": "enemy-skeleton-tex",
+                    "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
+                    "tint": [1.0, 1.0, 1.0, 1.0],
+                    "specular": [0.0, 0.0, 0.0],
+                    "shininess": 1.0
+                },
+                "enemy-creeper": {
+                    "type": "lit",
+                    "shader": "lit",
+                    "pipelineState": {
+                        "faceCulling": { "enabled": false },
+                        "depthTesting": { "enabled": true }
+                    },
+                    "texture": "enemy-creeper-tex",
+                    "sampler": "pixelated",
+                    "alphaThreshold": 0.1,
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "specular": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "shininess": 1.0
                 }
             }
         },
