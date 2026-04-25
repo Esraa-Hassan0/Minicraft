@@ -57,7 +57,8 @@ namespace our
                     for (int z = minZ; z <= maxZ; ++z)
                     {
                         int block = terrainWorld->getBlock(x, y, z);
-                        if (block != 0 && block != voxel::WATER)
+                        // Treat any non-air block (including WATER) as blocking for NPCs
+                        if (block != 0)
                             return false;
                     }
                 }
@@ -227,6 +228,20 @@ namespace our
                     movement->startPosition.y = 0.0f;
                     movement->targetPosition.y = 0.0f;
                     movement->initialized = true;
+                }
+
+                // Update jump timer and opportunistic jumping
+                movement->jumpTimer += deltaTime;
+                if (movement->isGrounded && movement->jumpTimer >= movement->jumpCooldown) {
+                    float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                    if (r < movement->jumpProbability) {
+                        movement->velocity.y = movement->jumpForce;
+                        movement->isGrounded = false;
+                        movement->jumpTimer = 0.0f;
+                    } else {
+                        // reset timer even if not jumping to avoid constant checks
+                        movement->jumpTimer = 0.0f;
+                    }
                 }
 
                 applyGravity(entity, movement, deltaTime);

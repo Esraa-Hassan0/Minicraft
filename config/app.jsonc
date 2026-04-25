@@ -909,22 +909,22 @@
                 "mesh": "pig",
                 "material": "pig-mat",
                 "scale": [
-                    0.10,
-                    0.10,
-                    0.10
+                    0.05,
+                    0.05,
+                    0.05
                 ],
                 "components": {
                     "foodReward": 3,
                     "npcType": "pig",
                     "AABBCollider": {
                         "halfSize": [
-                            0.8,
-                            0.5,
-                            0.8
+                            0.4,
+                            0.25,
+                            0.4
                         ],
                         "center": [
                             0.0,
-                            -0.3,
+                            -0.15,
                             0.0
                         ]
                     }
@@ -940,22 +940,22 @@
                 "mesh": "chicken",
                 "material": "chicken-mat",
                 "scale": [
-                    0.08,
-                    0.08,
-                    0.08
+                    0.04,
+                    0.04,
+                    0.04
                 ],
                 "components": {
                     "foodReward": 1,
                     "npcType": "chicken",
                     "AABBCollider": {
                         "halfSize": [
-                            0.4,
-                            0.4,
-                            0.4
+                            0.2,
+                            0.2,
+                            0.2
                         ],
                         "center": [
                             0.0,
-                            -0.2,
+                            -0.1,
                             0.0
                         ]
                     }
@@ -971,22 +971,22 @@
                 "mesh": "cow",
                 "material": "cow-mat",
                 "scale": [
-                    0.12,
-                    0.12,
-                    0.12
+                    0.06,
+                    0.06,
+                    0.06
                 ],
                 "components": {
                     "foodReward": 3,
                     "npcType": "cow",
                     "AABBCollider": {
                         "halfSize": [
-                            1.0,
-                            0.6,
-                            1.0
+                            0.5,
+                            0.3,
+                            0.5
                         ],
                         "center": [
                             0.0,
-                            -1.44,
+                            -0.72,
                             0.0
                         ]
                     }
@@ -1002,22 +1002,22 @@
                 "mesh": "sheep",
                 "material": "sheep-mat",
                 "scale": [
-                    0.10,
-                    0.10,
-                    0.10
+                    0.05,
+                    0.05,
+                    0.05
                 ],
                 "components": {
                     "foodReward": 2,
                     "npcType": "sheep",
                     "AABBCollider": {
                         "halfSize": [
-                            0.4,
-                            0.5,
-                            0.4
+                            0.2,
+                            0.25,
+                            0.2
                         ],
                         "center": [
                             0.0,
-                            0.5,
+                            0.25,
                             0.0
                         ]
                     }
@@ -1033,22 +1033,22 @@
                 "mesh": "bee",
                 "material": "bee-mat",
                 "scale": [
-                    0.06,
-                    0.06,
-                    0.06
+                    0.03,
+                    0.03,
+                    0.03
                 ],
                 "components": {
                     "foodReward": 1,
                     "npcType": "bee",
                     "AABBCollider": {
                         "halfSize": [
-                            0.2,
-                            0.2,
-                            0.2
+                            0.1,
+                            0.1,
+                            0.1
                         ],
                         "center": [
                             0.0,
-                            -3.586,
+                            -1.793,
                             0.0
                         ]
                     }
@@ -1064,22 +1064,22 @@
                 "mesh": "cat",
                 "material": "cat-mat",
                 "scale": [
-                    0.09,
-                    0.09,
-                    0.09
+                    0.045,
+                    0.045,
+                    0.045
                 ],
                 "components": {
                     "foodReward": 2,
                     "npcType": "cat",
                     "AABBCollider": {
                         "halfSize": [
-                            0.3,
-                            0.4,
-                            0.3
+                            0.15,
+                            0.2,
+                            0.15
                         ],
                         "center": [
                             0.0,
-                            0.4,
+                            0.2,
                             0.0
                         ]
                     }
@@ -1095,22 +1095,22 @@
                 "mesh": "frog",
                 "material": "frog-mat",
                 "scale": [
-                    0.08,
-                    0.08,
-                    0.08
+                    0.04,
+                    0.04,
+                    0.04
                 ],
                 "components": {
                     "foodReward": 1,
                     "npcType": "frog",
                     "AABBCollider": {
                         "halfSize": [
-                            0.3,
-                            0.3,
-                            0.3
+                            0.15,
+                            0.15,
+                            0.15
                         ],
                         "center": [
                             0.0,
-                            0.3,
+                            0.15,
                             0.0
                         ]
                     }
