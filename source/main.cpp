@@ -115,7 +115,9 @@ int main(int argc, char** argv) {
     app.registerState<RendererTestState>("renderer-test");
     // Then choose the state to run based on the option "start-scene" in the config
     if(app_config.contains(std::string{"start-scene"})){
-        app.changeState(app_config["start-scene"].get<std::string>());
+        std::string startState = app_config["start-scene"].get<std::string>();
+        std::cout << "[MAIN] start-scene from config: " << startState << std::endl;
+        app.changeState(startState);
     }
 
     // Finally run the application
