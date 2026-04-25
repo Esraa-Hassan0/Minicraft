@@ -61,21 +61,21 @@ class Playstate : public our::State
         std::vector<NPCSpawnData> npcs;
     };
 
-     // Terrain and ECS Systems
-     voxel::World terrainWorld;
-     our::World engineWorld;
-     our::ForwardRenderer renderer;
-     our::FreeCameraControllerSystem cameraController;
-     our::MovementSystem movementSystem;
-     our::PlayerControllerSystem playerController;
-     our::CollisionSystem collisionSystem;
-     our::LightSystem lightSystem;
-     our::TimeSystem timeSystem;
-     our::NPCMovementSystem npcMovementSystem;
-     our::Entity *highlightEntity = nullptr;      // Semi-transparent fill
-     our::Entity *highlightEdgesEntity = nullptr; // Clean square borders
-     our::Mesh *highlightEdgesMesh = nullptr;     // Line-based mesh for borders
-     BlockInteractionSystem blockInteraction;
+    // Terrain and ECS Systems
+    voxel::World terrainWorld;
+    our::World engineWorld;
+    our::ForwardRenderer renderer;
+    our::FreeCameraControllerSystem cameraController;
+    our::MovementSystem movementSystem;
+    our::PlayerControllerSystem playerController;
+    our::CollisionSystem collisionSystem;
+    our::LightSystem lightSystem;
+    our::TimeSystem timeSystem;
+    our::NPCMovementSystem npcMovementSystem;
+    our::Entity *highlightEntity = nullptr;      // Semi-transparent fill
+    our::Entity *highlightEdgesEntity = nullptr; // Clean square borders
+    our::Mesh *highlightEdgesMesh = nullptr;     // Line-based mesh for borders
+    BlockInteractionSystem blockInteraction;
 
     // Hand Animation State
     float handAnimTime = 0.0f;
@@ -99,7 +99,6 @@ class Playstate : public our::State
     float levelUpNotificationTime = 0.0f;
     int displayedLevel = 1;
 
-    
     static int hotbarBlockType(int slot)
     {
         static const int types[kHotbarSlots] = {
@@ -205,6 +204,7 @@ class Playstate : public our::State
             engineWorld.markForRemoval(entity);
         for (auto *mesh : it->second.meshes)
             delete mesh;
+        // NPCs are tracked but not stored as entities in renderGroup, they use engineWorld directly
         chunkRenderGroups.erase(it);
     }
 
@@ -275,6 +275,9 @@ class Playstate : public our::State
         addGrassFaces(our::mesh_utils::FaceCategory::BOTTOM, "dirt");
         addGrassFaces(our::mesh_utils::FaceCategory::SIDES, "grass-side");
 
+        // Spawn NPCs for this chunk
+        spawnNPCsInChunk(chunk.chunkX, chunk.chunkZ);
+
         chunkRenderGroups[chunkKey] = std::move(renderGroup);
     }
 
@@ -321,6 +324,9 @@ class Playstate : public our::State
                 {
                     terrainWorld.generateChunk(cx, cz);
                     chunkSetChanged = true;
+
+                    // Spawn NPCs in new chunk
+                    spawnNPCsInChunk(cx, cz);
                 }
             }
         }
@@ -486,8 +492,6 @@ class Playstate : public our::State
         }
     }
 
-
-
     bool isValidNPCPosition(our::Entity *entity, const glm::vec3 &newPos)
     {
         auto *aabb = entity->getComponent<our::AABBColliderComponent>();
@@ -521,26 +525,40 @@ class Playstate : public our::State
 
     void spawnNPCs()
     {
-        printf("[SPAWN] spawnNPCs() called. npcTemplates.size()=%zu\n", npcTemplates.size());
         if (npcTemplates.empty())
-        {
-            printf("[SPAWN] npcTemplates is EMPTY - returning early\n");
             return;
-        }
+
+        // Use player position directly
+        our::Entity *playerEntity = findPlayerEntity();
+        if (!playerEntity)
+            return;
+
+        glm::vec3 playerPos = playerEntity->localTransform.position;
+        int cx = (int)std::floor(playerPos.x / (float)voxel::Chunk::CHUNK_SIZE);
+        int cz = (int)std::floor(playerPos.z / (float)voxel::Chunk::CHUNK_SIZE);
+
+        spawnNPCsInChunk(cx, cz);
+    }
+
+    void spawnNPCsInChunk(int cx, int cz)
+    {
+        std::string chunkKey = std::to_string(cx) + "_" + std::to_string(cz);
+
+        // Already spawned NPCs in this chunk
+        if (chunkRenderGroups.find(chunkKey) != chunkRenderGroups.end() &&
+            !chunkRenderGroups[chunkKey].npcs.empty())
+            return;
 
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<> npcCountDist(10, 30);
-        std::uniform_int_distribution<> templateDist(0, (int)npcTemplates.size() - 1);
+        // Reduce NPCs per chunk to make distribution less dense
+        std::uniform_int_distribution<> npcCountDist(0, 1);
+        std::uniform_int_distribution<> templateDist(0, static_cast<int>(npcTemplates.size()) - 1);
 
         int numNPCs = npcCountDist(gen);
-        printf("[SPAWN] spawning %d NPCs\n", numNPCs);
 
         for (int i = 0; i < numNPCs; ++i)
         {
-            int cx = currentCenterChunkX;
-            int cz = currentCenterChunkZ;
-
             std::uniform_int_distribution<> localDist(0, voxel::Chunk::CHUNK_SIZE - 1);
             int lx = localDist(gen);
             int ly = terrainWorld.height - 1;
@@ -553,15 +571,40 @@ class Playstate : public our::State
             if (ly < 0)
                 continue;
 
+            // Check if water is nearby (within 3 blocks)
+            bool nearWater = false;
+            int checkX = cx * voxel::Chunk::CHUNK_SIZE + lx;
+            int checkZ = cz * voxel::Chunk::CHUNK_SIZE + lz;
+            for (int dx = -3; dx <= 3 && !nearWater; dx++)
+            {
+                for (int dz = -3; dz <= 3 && !nearWater; dz++)
+                {
+                    for (int dy = -2; dy <= 2; dy++)
+                    {
+                        if (terrainWorld.getBlock(checkX + dx, ly + dy, checkZ + dz) == voxel::WATER)
+                        {
+                            nearWater = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (nearWater)
+                continue;
+
             float worldX = cx * voxel::Chunk::CHUNK_SIZE + lx + 0.5f;
-            float worldY = ly + 1.5f;
             float worldZ = cz * voxel::Chunk::CHUNK_SIZE + lz + 0.5f;
 
             // Pick a template
             const auto &templateData = npcTemplates[templateDist(gen)];
 
+            // Compute Y so the collider bottom sits slightly above the block top
+            float blockTopY = ly + 1.0f;
+            float colliderBottomLocal = templateData.aabbCenter.y - templateData.aabbHalfSize.y;
+            float desiredEntityY = blockTopY - colliderBottomLocal + 0.3f; // large offset for mesh geometry
+
             our::Entity *npcEntity = engineWorld.add();
-            npcEntity->localTransform.position = glm::vec3(worldX, worldY, worldZ);
+            npcEntity->localTransform.position = glm::vec3(worldX, desiredEntityY, worldZ);
             npcEntity->localTransform.scale = glm::vec3(templateData.scaleX, templateData.scaleY, templateData.scaleZ);
 
             auto *meshRenderer = npcEntity->addComponent<our::MeshRendererComponent>();
@@ -593,11 +636,30 @@ class Playstate : public our::State
             auto *killable = npcEntity->addComponent<our::KillableNPCComponent>();
             killable->foodReward = templateData.foodReward;
             killable->npcType = templateData.npcType;
-            
-            printf("[SPAWN] NPC #%d created at (%.2f, %.2f, %.2f) type=%s movementType=%d\n",
-                   i, worldX, worldY, worldZ, templateData.npcType.c_str(), (int)movement->movementType);
+
+            // Store NPC spawn data in chunk render group
+            std::string chunkKey = std::to_string(cx) + "_" + std::to_string(cz);
+            NPCSpawnData spawnData;
+            spawnData.chunkX = cx;
+            spawnData.chunkZ = cz;
+            spawnData.localX = lx;
+            spawnData.localY = ly;
+            spawnData.localZ = lz;
+            spawnData.scaleX = templateData.scaleX;
+            spawnData.scaleY = templateData.scaleY;
+            spawnData.scaleZ = templateData.scaleZ;
+            spawnData.meshName = templateData.meshName;
+            spawnData.matName = templateData.matName;
+            spawnData.foodReward = templateData.foodReward;
+            spawnData.npcType = templateData.npcType;
+            spawnData.speed = templateData.speed;
+            spawnData.moveRadius = templateData.moveRadius;
+            spawnData.waitTime = templateData.waitTime;
+            spawnData.movementType = templateData.movementType;
+            spawnData.aabbCenter = templateData.aabbCenter;
+            spawnData.aabbHalfSize = templateData.aabbHalfSize;
+            chunkRenderGroups[chunkKey].npcs.push_back(spawnData);
         }
-        printf("[SPAWN] spawnNPCs() complete. Total NPCs in world: %zu\n", engineWorld.getEntities().size());
     }
 
     // --- State Overrides ---
@@ -636,7 +698,7 @@ class Playstate : public our::State
                 }
                 else
                 {
-                    templateData.scaleX = templateData.scaleY = templateData.scaleZ = 1.0f;
+                    templateData.scaleX = templateData.scaleY = templateData.scaleZ = 0.5f;
                 }
 
                 if (npcTypeJson.contains("components") && npcTypeJson["components"].is_object())
@@ -650,22 +712,20 @@ class Playstate : public our::State
                     {
                         const auto &aabbJson = comp["AABBCollider"];
                         templateData.aabbCenter = glm::vec3(0.0f);
-                        templateData.aabbHalfSize = glm::vec3(0.4f);
+                        templateData.aabbHalfSize = glm::vec3(0.2f);
                         if (aabbJson.contains("center") && aabbJson["center"].is_array() && aabbJson["center"].size() >= 3)
                         {
                             templateData.aabbCenter = glm::vec3(
                                 aabbJson["center"][0].get<float>(),
                                 aabbJson["center"][1].get<float>(),
-                                aabbJson["center"][2].get<float>()
-                            );
+                                aabbJson["center"][2].get<float>());
                         }
                         if (aabbJson.contains("halfSize") && aabbJson["halfSize"].is_array() && aabbJson["halfSize"].size() >= 3)
                         {
                             templateData.aabbHalfSize = glm::vec3(
                                 aabbJson["halfSize"][0].get<float>(),
                                 aabbJson["halfSize"][1].get<float>(),
-                                aabbJson["halfSize"][2].get<float>()
-                            );
+                                aabbJson["halfSize"][2].get<float>());
                         }
                         printf("[INIT] NPC %s AABB center=(%.2f,%.2f,%.2f) halfSize=(%.2f,%.2f,%.2f)\n",
                                templateData.npcType.c_str(),
@@ -696,7 +756,7 @@ class Playstate : public our::State
                 }
                 npcTemplates.push_back(templateData);
                 printf("[INIT] Added NPC template: mesh=%s type=%s movementType=%s\n",
-                       templateData.meshName.c_str(), templateData.npcType.c_str(), 
+                       templateData.meshName.c_str(), templateData.npcType.c_str(),
                        templateData.movementType.c_str());
             }
             printf("[INIT] Finished parsing npcTypes. Total templates: %zu\n", npcTemplates.size());
@@ -745,12 +805,12 @@ class Playstate : public our::State
         }
         if (terrainMeshDirty)
             rebuildMesh();
-        
+
         // Initialize NPC Movement System with player entity and terrain
         npcMovementSystem.initialize(playerEntity, &terrainWorld);
-        printf("[INIT] NPCMovementSystem initialized with playerEntity=%p and terrainWorld=%p\n", 
-               (void*)playerEntity, (void*)&terrainWorld);
-        
+        printf("[INIT] NPCMovementSystem initialized with playerEntity=%p and terrainWorld=%p\n",
+               (void *)playerEntity, (void *)&terrainWorld);
+
         spawnNPCs();
         for (auto entity : engineWorld.getEntities())
         {
@@ -770,7 +830,8 @@ class Playstate : public our::State
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         // Draw inventory
-        if (isInventoryOpen) {
+        if (isInventoryOpen)
+        {
             ImVec2 windowSize(400, 360);
             ImGui::SetNextWindowPos(ImVec2((displaySize.x - windowSize.x) * 0.5f, (displaySize.y - windowSize.y) * 0.5f), ImGuiCond_Always);
             ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
@@ -785,13 +846,16 @@ class Playstate : public our::State
             // ==========================================
             // 1. Crafting Section (2x2 + Output)
             // ==========================================
-            ImGui::SetCursorPos(ImVec2(180, 20)); 
+            ImGui::SetCursorPos(ImVec2(180, 20));
             ImGui::BeginGroup();
             ImGui::Text("Crafting");
-            for (int r = 0; r < 2; r++) {
-                for (int c = 0; c < 2; c++) {
+            for (int r = 0; r < 2; r++)
+            {
+                for (int c = 0; c < 2; c++)
+                {
                     ImGui::Button(("##craft" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
-                    if (c < 1) ImGui::SameLine();
+                    if (c < 1)
+                        ImGui::SameLine();
                 }
             }
             ImGui::EndGroup();
@@ -811,16 +875,20 @@ class Playstate : public our::State
             // ==========================================
             // 2. Main Inventory Section (3x9)
             // ==========================================
-            ImGui::SetCursorPosX(16); 
-            ImGui::Text("Inventory");
-            
             ImGui::SetCursorPosX(16);
-            for (int r = 0; r < 3; r++) {
-                for (int c = 0; c < 9; c++) {
+            ImGui::Text("Inventory");
+
+            ImGui::SetCursorPosX(16);
+            for (int r = 0; r < 3; r++)
+            {
+                for (int c = 0; c < 9; c++)
+                {
                     ImGui::Button(("##inv" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
-                    if (c < 8) ImGui::SameLine();
+                    if (c < 8)
+                        ImGui::SameLine();
                 }
-                if (r < 2) ImGui::SetCursorPosX(16);
+                if (r < 2)
+                    ImGui::SetCursorPosX(16);
             }
 
             ImGui::Spacing();
@@ -830,20 +898,24 @@ class Playstate : public our::State
             // 3. Hotbar Section (1x9)
             // ==========================================
             ImGui::SetCursorPosX(16);
-            for (int c = 0; c < 9; c++) {
+            for (int c = 0; c < 9; c++)
+            {
                 ImGui::Button(("##hotbar_inv" + std::to_string(c)).c_str(), ImVec2(36, 36));
-                if (c < 8) ImGui::SameLine();
+                if (c < 8)
+                    ImGui::SameLine();
             }
 
             ImGui::End();
-            
+
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(2);
-        } else {
+        }
+        else
+        {
             ImDrawList *drawList = ImGui::GetForegroundDrawList();
             ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         }
-    
+
         // 1. Draw Hotbar
         our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
         if (player)
@@ -975,7 +1047,8 @@ class Playstate : public our::State
             float xpBarY = 16.0f;
 
             float xpProgress = player->currentXP;
-            if (xpProgress > 1.0f) xpProgress = 1.0f;
+            if (xpProgress > 1.0f)
+                xpProgress = 1.0f;
 
             ImU32 bgColor = IM_COL32(30, 30, 35, 220);
             ImU32 fillColor = IM_COL32(100, 200, 255, 255);
@@ -997,17 +1070,16 @@ class Playstate : public our::State
         {
             char levelUpText[64];
             std::snprintf(levelUpText, sizeof(levelUpText), "LEVEL UP! Lv.%d", displayedLevel);
-            ImFont* font = ImGui::GetIO().FontDefault;
+            ImFont *font = ImGui::GetIO().FontDefault;
             float baseSize = font ? font->FontSize : 24.0f;
             float scale = 2.5f;
             float pulse = 1.0f + 0.1f * std::sin(levelUpNotificationTime * 8.0f);
             float fontSize = baseSize * scale * pulse;
-            
+
             ImVec2 textPos = ImVec2(
                 (displaySize.x - 280.0f * pulse) * 0.5f,
-                (displaySize.y - 60.0f * pulse) * 0.5f
-            );
-            
+                (displaySize.y - 60.0f * pulse) * 0.5f);
+
             drawList->AddText(font, fontSize, ImVec2(textPos.x - 1, textPos.y - 1), IM_COL32(0, 80, 40, 255), levelUpText);
             drawList->AddText(font, fontSize, ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 80, 40, 255), levelUpText);
             drawList->AddText(font, fontSize, textPos, IM_COL32(50, 255, 100, 255), levelUpText);
@@ -1061,15 +1133,18 @@ class Playstate : public our::State
         blockInteraction.update((float)deltaTime, &engineWorld);
         auto &keyboard = getApp()->getKeyboard();
         // inventory system
-        if (keyboard.justPressed(GLFW_KEY_E)) {
+        if (keyboard.justPressed(GLFW_KEY_E))
+        {
             isInventoryOpen = !isInventoryOpen;
-            if (isInventoryOpen) {
-                cameraController.exit(); 
-            } else {
-                cameraController.enter(getApp()); 
+            if (isInventoryOpen)
+            {
+                cameraController.exit();
+            }
+            else
+            {
+                cameraController.enter(getApp());
             }
         }
-
 
         // Handle water damage
         if (player)
@@ -1137,12 +1212,12 @@ class Playstate : public our::State
                 volume = 1.0f - (distance / maxRadius);
                 if (volume < 0.0f)
                     volume = 0.0f;
-             }
-             our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
-         }
+            }
+            our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
+        }
 
-         // Update NPC movement using the dedicated system
-         npcMovementSystem.update(&engineWorld, (float)deltaTime);
+        // Update NPC movement using the dedicated system
+        npcMovementSystem.update(&engineWorld, (float)deltaTime);
 
         auto &mouse = getApp()->getMouse();
         if (playerEntity)
@@ -1154,7 +1229,8 @@ class Playstate : public our::State
 
             // Hand Animation Logic
             bool triggerHitPulse = false;
-            if (mouse.justPressed(0) || mouse.justPressed(1)) {
+            if (mouse.justPressed(0) || mouse.justPressed(1))
+            {
                 triggerHitPulse = true;
             }
 
@@ -1184,46 +1260,47 @@ class Playstate : public our::State
                     our::AudioSystem::playSound("assets/sounds/Death.wav");
                 }
             }
-                if(mouse.isPressed(0)){
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
-                    if (hit.hit)
-                { 
+            if (mouse.isPressed(0))
+            {
+                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                if (hit.hit)
+                {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                    auto holdResult = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty,(float)deltaTime);
+                    auto holdResult = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime);
                     if (holdResult == BlockInteractionSystem::HoldResult::Broken)
                     {
-                       // The block was completely broken
-                       our::AudioSystem::playSound("assets/sounds/Hit.wav");
-                          if (player)
+                        // The block was completely broken
+                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                        if (player)
                             registerCollectedBlock(player, type);
                     }
                     else if (holdResult == BlockInteractionSystem::HoldResult::HitPulse)
                     {
-                            triggerHitPulse = true;
-                            // The block was hit but not broken
-                            if (type == voxel::GRASS)
-                                our::AudioSystem::playSound("assets/sounds/Grass.wav");
-                            else if (type == voxel::DIRT)
-                                our::AudioSystem::playSound("assets/sounds/Dirt.wav");
-                            else if (type == voxel::SAND)
-                                our::AudioSystem::playSound("assets/sounds/Sand.wav");
-                            else if (type == voxel::STONE)
-                                our::AudioSystem::playSound("assets/sounds/Stone.wav");
-                            else if (type == voxel::Glass)
-                                our::AudioSystem::playSound("assets/sounds/Glass.wav");
-                            else if (type == voxel::WOOD || type == voxel::LOG)
-                                our::AudioSystem::playSound("assets/sounds/Wood.wav");
-                            else
-                                our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                        triggerHitPulse = true;
+                        // The block was hit but not broken
+                        if (type == voxel::GRASS)
+                            our::AudioSystem::playSound("assets/sounds/Grass.wav");
+                        else if (type == voxel::DIRT)
+                            our::AudioSystem::playSound("assets/sounds/Dirt.wav");
+                        else if (type == voxel::SAND)
+                            our::AudioSystem::playSound("assets/sounds/Sand.wav");
+                        else if (type == voxel::STONE)
+                            our::AudioSystem::playSound("assets/sounds/Stone.wav");
+                        else if (type == voxel::Glass)
+                            our::AudioSystem::playSound("assets/sounds/Glass.wav");
+                        else if (type == voxel::WOOD || type == voxel::LOG)
+                            our::AudioSystem::playSound("assets/sounds/Wood.wav");
+                        else
+                            our::AudioSystem::playSound("assets/sounds/Hit.wav");
                     }
                 }
             }
-            else if (mouse.justReleased(0)) 
+            else if (mouse.justReleased(0))
             {
                 blockInteraction.currentTargetContext = {-1, -1, -1};
                 blockInteraction.accumulatedBreakTime = 0.0f;
             }
-            
+
             if (mouse.justPressed(1) && player && !player->isUnderwater)
             {
                 voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
@@ -1240,26 +1317,32 @@ class Playstate : public our::State
             // Hand Animation & Interaction Update
             our::Entity *handEntity = nullptr;
             our::HandComponent *handComp = nullptr;
-            
+
             static bool handFoundOnce = false;
             static bool shownEntities = false;
-            
-            if (!shownEntities) {
+
+            if (!shownEntities)
+            {
                 std::cout << "DEBUG: All entities in world:\n";
-                for(auto entity : engineWorld.getEntities()){
-                    if (entity) {
+                for (auto entity : engineWorld.getEntities())
+                {
+                    if (entity)
+                    {
                         std::cout << "  - Name: '" << entity->name << "' Parent: " << (entity->parent ? entity->parent->name : "none") << "\n";
                     }
                 }
                 shownEntities = true;
             }
-            
-            for(auto entity : engineWorld.getEntities()){
-                if(entity && entity->name == "player_hand") {
+
+            for (auto entity : engineWorld.getEntities())
+            {
+                if (entity && entity->name == "player_hand")
+                {
                     handEntity = entity;
                     handEntity->localTransform.scale = glm::vec3(0.15f, 0.2f, 0.1f);
                     handComp = entity->getComponent<our::HandComponent>();
-                    if (!handFoundOnce) {
+                    if (!handFoundOnce)
+                    {
                         std::cout << "DEBUG: Hand entity found!\n";
                         std::cout << "  Has HandComponent: " << (handComp != nullptr ? "YES" : "NO") << "\n";
                         std::cout << "  Has MeshRenderer: " << (entity->getComponent<our::MeshRendererComponent>() != nullptr ? "YES" : "NO") << "\n";
@@ -1270,9 +1353,10 @@ class Playstate : public our::State
                 }
             }
 
-            if (handEntity && handComp) {
+            if (handEntity && handComp)
+            {
                 std::cout << "DEBUG: About to update hand. Position before: " << handEntity->localTransform.position.x << ", " << handEntity->localTransform.position.y << ", " << handEntity->localTransform.position.z << "\n";
-                
+
                 // Detect targets within interaction range
                 float interactRange = handComp->interactionRange;
                 voxel::RayHit localHoverHit = terrainWorld.castRay(camPos, camDir, interactRange);
@@ -1281,10 +1365,13 @@ class Playstate : public our::State
                 bool targetInRange = false;
                 glm::vec3 targetPos(0.0f);
 
-                if (localHoverNPC) {
+                if (localHoverNPC)
+                {
                     targetInRange = true;
                     targetPos = localHoverNPC->localTransform.position;
-                } else if (localHoverHit.hit) {
+                }
+                else if (localHoverHit.hit)
+                {
                     targetInRange = true;
                     targetPos = glm::vec3(localHoverHit.x + 0.5f, localHoverHit.y + 0.5f, localHoverHit.z + 0.5f);
                 }
@@ -1297,13 +1384,15 @@ class Playstate : public our::State
                     camDir,
                     camMat,
                     deltaTime,
-                    triggerHitPulse,            // Currently hitting
-                    targetInRange,              // Target in range
-                    targetPos,                  // Target position
-                    &terrainWorld               // Terrain for collision avoidance
+                    triggerHitPulse, // Currently hitting
+                    targetInRange,   // Target in range
+                    targetPos,       // Target position
+                    &terrainWorld    // Terrain for collision avoidance
                 );
-            } else {
-                std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void*)handEntity << " handComp=" << (void*)handComp << "\n";
+            }
+            else
+            {
+                std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void *)handEntity << " handComp=" << (void *)handComp << "\n";
             }
         }
 
@@ -1313,7 +1402,8 @@ class Playstate : public our::State
 
         // Delete particles or hit blocks that have expired outside of chunk builds
         engineWorld.deleteMarkedEntities();
-        if (isInventoryOpen) {
+        if (isInventoryOpen)
+        {
             renderer.render(&engineWorld);
             return; // Exit early!
         }

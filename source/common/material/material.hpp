@@ -54,7 +54,7 @@ namespace our {
     };
 
     // Material supporting Blinn-Phong lighting with texture maps.
-// Inherits from TexturedMaterial (albedo texture) and adds specular map.
+// Inherits from TexturedMaterial (albedo texture) and adds specular, roughness, AO, and emission maps.
 // Uses lit.vert/lit.frag shaders for per-fragment lighting.
      class LitMaterial : public TexturedMaterial {
          public:
@@ -62,16 +62,29 @@ namespace our {
          // White = full specular reflection, black = no specular
          Texture2D* specularMap = nullptr;
          Sampler* specularSampler = nullptr;
+         // Roughness map (unit 2): grayscale controlling surface roughness
+         // White = rough (broad highlight), black = smooth (sharp highlight)
+         Texture2D* roughnessMap = nullptr;
+         Sampler* roughnessSampler = nullptr;
+         // Ambient occlusion map (unit 3): darkens areas without light access
+         // White = full lighting, black = fully shadowed
+         Texture2D* aoMap = nullptr;
+         Sampler* aoSampler = nullptr;
+         // Emission map (unit 4): areas that emit light (glow)
+         Texture2D* emissionMap = nullptr;
+         Sampler* emissionSampler = nullptr;
          // Shininess exponent: higher = smaller, sharper specular highlight
          // Typical range: 8.0 (rough) to 128.0 (shiny)
          float shininess = 32.0f;
          // Specular tint from JSON: multiplies the final specular highlight
          // vec3(0,0,0) = no specular (matte), vec3(1,1,1) = full specular (shiny)
          glm::vec3 specular = glm::vec3(1.0f);
+         // Emission color: light emitted by this surface
+         glm::vec3 emission = glm::vec3(0.0f);
 
-         // Sets up pipeline state and binds specular map to texture unit 1
+         // Sets up pipeline state and binds texture maps to units 1-4
          void setup() const override;
-         // Reads material properties from JSON (specularMap, specularSampler, shininess, specular)
+         // Reads material properties from JSON
          void deserialize(const nlohmann::json& data) override;
      };
 
