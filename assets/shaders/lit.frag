@@ -33,12 +33,19 @@ in Varyings {
 // Material texture samplers:
 // albedoTex (unit 0): Diffuse/albedo map
 // specularTex (unit 1): Specular intensity map (grayscale)
+// roughnessTex (unit 2): Roughness map (grayscale)
+// aoTex (unit 3): Ambient occlusion map (grayscale)
+// emissiveTex (unit 4): Emission map (RGB = emission color)
 uniform sampler2D albedoTex;
 uniform sampler2D specularTex;
+uniform sampler2D roughnessTex;
+uniform sampler2D aoTex;
+uniform sampler2D emissiveTex;
 
 // Material properties:
 uniform float shininess;      // Phong shininess exponent (higher = smaller specular highlight)
 uniform vec3 cameraPos;   // World-space camera position (for view direction)
+uniform vec3 emission;   // Emission color (multiplied with emissiveTex)
 
 // Light array uniform block:
 // numLights: Number of active lights this frame
@@ -60,13 +67,10 @@ uniform vec3 specular_tint;
 out vec4 fragColor;
 
 // Calculates Blinn-Phong lighting contribution from a single light.
-// L: Light data
-// N: Surface normal (normalized)
-// V: View direction (normalized)
-// albedo: Surface diffuse color
-// spec: Surface specular color
-// Returns: Combined ambient + diffuse + specular contribution
-vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
+// L: Light data, N: Surface normal, V: View direction
+// albedo: Surface diffuse color, spec: Surface specular color
+// passedShininess: Material shininess (modified by roughness)
+vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec, float passedShininess) {
     vec3 lightDir;      // Direction from surface to light
     float attenuation = 1.0;  // Distance-based falloff
 
@@ -112,7 +116,7 @@ vec3 calcLight(Light L, vec3 N, vec3 V, vec3 albedo, vec3 spec) {
     float diff = max(dot(N, lightDir), 0.0);
 
     // Specular: reflection intensity.
-    float specular = pow(max(dot(N, H), 0.0), shininess);
+    float specular = pow(max(dot(N, H), 0.0), passedShininess);
 
      // Combine lighting terms
      // Ambient light is typically global/constant and shouldn't attenuate by distance (unlike local lights)
@@ -133,6 +137,12 @@ void main() {
     // Sample textures
     vec4 albedoSample = texture(albedoTex, fs_in.texcoord) * tint;
     vec3 specSample = texture(specularTex, fs_in.texcoord).rgb;
+    float roughnessSample = texture(roughnessTex, fs_in.texcoord).r;
+    float aoSample = texture(aoTex, fs_in.texcoord).r;
+    vec3 emissiveSample = texture(emissiveTex, fs_in.texcoord).rgb;
+
+    // Roughness affects shininess: rough = low shininess, smooth = high shininess
+    float effectiveShininess = shininess * (1.0 - roughnessSample * 0.9 + 0.1);
 
     // Normalize interpolated normal
     vec3 N = normalize(fs_in.normal);
@@ -144,11 +154,17 @@ void main() {
     vec3 result = vec3(0.0);
     if (numLights > 0) {
         for (int i = 0; i < numLights && i < MAX_LIGHTS; i++) {
-            result += calcLight(lights[i], N, V, albedoSample.rgb, specSample);
+            result += calcLight(lights[i], N, V, albedoSample.rgb, specSample, effectiveShininess);
         }
     } else {
         result = albedoSample.rgb * vec3(0.1);
     }
+
+    // Apply AO (multiply after lighting)
+    result *= aoSample;
+
+    // Add emission (directly added after lighting)
+    result += emissiveSample * emission;
 
     // Apply damage flash effect (blend if active)
     // Mix normal result with flash color based on flashStrength
