@@ -898,6 +898,78 @@ class Playstate : public our::State
         }
     }
 
+    void drawGameOverlay() {
+        our::Entity *playerEntity = findPlayerEntity();
+        if (!playerEntity) return;
+        auto *player = playerEntity->getComponent<our::PlayerComponent>();
+        if (!player) return;
+        if (player->gameState == our::GameState::PLAYING) return;
+
+        ImGuiIO& io = ImGui::GetIO();
+        ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+
+        // Full-screen dim overlay
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(io.DisplaySize);
+        ImGui::SetNextWindowBgAlpha(0.0f);
+        ImGuiWindowFlags bgFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+        ImGui::Begin("##gameoverdim", nullptr, bgFlags);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled({0,0}, io.DisplaySize, IM_COL32(0,0,0,160));
+        ImGui::End();
+
+        // Centered panel
+        ImVec2 panelSize(520, 300);
+        ImGui::SetNextWindowPos(ImVec2(center.x - panelSize.x*0.5f, center.y - panelSize.y*0.5f));
+        ImGui::SetNextWindowSize(panelSize);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings;
+
+        if (player->gameState == our::GameState::WIN) {
+            ImGui::SetNextWindowBgAlpha(0.92f);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.25f, 0.05f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.2f,  0.8f,  0.2f, 1.0f));
+        } else {
+            ImGui::SetNextWindowBgAlpha(0.92f);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.25f, 0.05f, 0.05f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.9f,  0.2f,  0.2f, 1.0f));
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   12.0f);
+
+        ImGui::Begin("##gameover", nullptr, flags);
+
+        // Title
+        ImGui::SetWindowFontScale(2.8f);
+        const char* title = (player->gameState == our::GameState::WIN) ? "YOU WIN!" : "GAME OVER";
+        ImVec4 titleColor = (player->gameState == our::GameState::WIN) ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f) : ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+        ImGui::SetCursorPosX((panelSize.x - ImGui::CalcTextSize(title).x) * 0.5f);
+        ImGui::TextColored(titleColor, "%s", title);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Stats
+        ImGui::SetWindowFontScale(1.3f);
+        ImGui::SetCursorPosX(40.0f);
+        if (player->gameState == our::GameState::WIN) {
+            ImGui::TextColored({0.9f,0.9f,0.9f,1.0f}, "Resources Collected: %d / %d", player->resourcesCollected, player->resourcesRequired);
+        } else {
+            ImGui::TextColored({0.9f,0.9f,0.9f,1.0f}, "You were defeated!");
+        }
+        ImGui::Spacing();
+        ImGui::SetCursorPosX(40.0f);
+        ImGui::TextColored({0.85f,0.85f,0.5f,1.0f}, "Press  R  to restart");
+        ImGui::Spacing();
+        ImGui::SetCursorPosX(40.0f);
+        ImGui::TextColored({0.7f,0.7f,0.7f,1.0f}, "Press  ESC  to return to the main menu");
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(2);
+    }
+
     void onImmediateGui() override
     {
         our::Entity *playerEntity = findPlayerEntity();
@@ -1219,154 +1291,190 @@ class Playstate : public our::State
             drawList->AddText(font, fontSize, textPos, IM_COL32(50, 255, 100, 255), levelUpText);
         }
 
-        enemySystem.drawGameOverlay(&engineWorld);
+        drawGameOverlay();
     }
 
     void onDraw(double deltaTime) override
     {
+        int i = 0;
+        our::Entity *playerEntity = findPlayerEntity();
+        our::PlayerComponent *player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
+        
+        bool isPlaying = (!player || player->gameState == our::GameState::PLAYING);
+
         movementSystem.update(&engineWorld, (float)deltaTime);
         playerController.update(&engineWorld, (float)deltaTime);
+        
+        if (!isPlaying && player) {
+            player->velocity.x = 0.0f;
+            player->velocity.z = 0.0f;
+            if (player->velocity.y > 0.0f) {
+                player->velocity.y = 0.0f;
+            }
+        }
 
-        our::Entity *playerEntity = findPlayerEntity();
         if (playerEntity)
             streamChunksAroundPlayer(playerEntity->localTransform.position);
 
         collisionSystem.update(&engineWorld, &terrainWorld, (float)deltaTime);
         lightSystem.update(&engineWorld, (float)deltaTime);
-        timeSystem.update(&engineWorld, (float)deltaTime);
+        
+        if (isPlaying) {
+            timeSystem.update(&engineWorld, (float)deltaTime);
+            if (playerEntity)
+                enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
 
-        if (playerEntity)
-            enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
-
-        our::PlayerComponent *player = nullptr;
-        if (playerEntity)
-        {
-            player = playerEntity->getComponent<our::PlayerComponent>();
             if (player && player->level > currentLevelTarget) {
                 currentLevelTarget = player->level;
                 levelTargetPopupTime = 5.0f;
                 our::AudioSystem::playSound("assets/sounds/Notification.wav");
             }
-        }
 
-        // Update level up notification timer
-        if (levelUpNotificationTime > 0.0f)
-            levelUpNotificationTime -= (float)deltaTime;
+            // Update level up notification timer
+            if (levelUpNotificationTime > 0.0f)
+                levelUpNotificationTime -= (float)deltaTime;
 
-        if (levelTargetPopupTime > 0.0f)
-            levelTargetPopupTime -= (float)deltaTime;
+            if (levelTargetPopupTime > 0.0f)
+                levelTargetPopupTime -= (float)deltaTime;
 
-        // Level 1: XP increases by 1/3 every day
-        if (player && player->level == 1)
-        {
-            int daysPassed = timeSystem.getDaysPassed();
-            if (daysPassed > player->daysSurvived)
+            // Level 1: XP increases by 1/3 every day
+            if (player && player->level == 1)
             {
-                int daysDiff = daysPassed - player->daysSurvived;
-                player->daysSurvived = daysPassed;
-                player->currentXP += daysDiff * (1.0f / 3.0f);
-                if (player->currentXP >= 1.0f)
+                int daysPassed = timeSystem.getDaysPassed();
+                if (daysPassed > player->daysSurvived)
                 {
-                    player->currentXP = 1.0f;
-                    player->level = 2;
-                    player->currentXP = 0.0f;
-                    levelUpNotificationTime = 3.0f;
-                    displayedLevel = 2;
-                    our::AudioSystem::playSound("assets/sounds/levelup.wav");
-                }
-            }
-        }
-
-        blockInteraction.update((float)deltaTime, &engineWorld);
-        auto &keyboard = getApp()->getKeyboard();
-        // inventory system
-        if (keyboard.justPressed(GLFW_KEY_E))
-        {
-            isInventoryOpen = !isInventoryOpen;
-            if (isInventoryOpen)
-            {
-                cameraController.exit();
-            }
-            else
-            {
-                cameraController.enter(getApp());
-            }
-        }
-
-        // Handle water damage
-        if (player)
-        {
-            float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
-            our::AudioSystem::setGlobalVolume(targetVolume);
-
-            if (player->isUnderwater)
-            {
-                player->waterDamageTimer += (float)deltaTime;
-                while (player->waterDamageTimer >= player->waterDamageInterval)
-                {
-                    player->health -= player->waterDamageAmount;
-                    player->shakeTimer = 0.5f;
-                    player->shakeIntensity = 0.2f;
-                    player->waterDamageTimer -= player->waterDamageInterval;
-
-                    if (player->health <= 0.0f)
+                    int daysDiff = daysPassed - player->daysSurvived;
+                    player->daysSurvived = daysPassed;
+                    player->currentXP += daysDiff * (1.0f / 3.0f);
+                    if (player->currentXP >= 1.0f)
                     {
-                        player->health = 0.0f;
-                        player->isAlive = false;
-                        player->gameState = our::GameState::LOSE;
-                        break;
+                        player->currentXP = 1.0f;
+                        player->level = 2;
+                        player->currentXP = 0.0f;
+                        levelUpNotificationTime = 3.0f;
+                        displayedLevel = 2;
+                        our::AudioSystem::playSound("assets/sounds/levelup.wav");
                     }
                 }
             }
-            else if (player->waterDamageTimer > 0.0f)
+            blockInteraction.update((float)deltaTime, &engineWorld);
+            // Handle water damage
+            if (player)
             {
-                player->waterDamageTimer = 0.0f;
-            }
+                float targetVolume = player->isUnderwater ? 0.2f : 1.0f;
+                our::AudioSystem::setGlobalVolume(targetVolume);
 
-            updateMeatDecay(player, (float)deltaTime);
-
-            // Dynamic ambient sound based on distance to nearest water
-            float maxRadius = 10.0f;
-            float minDistanceSq = maxRadius * maxRadius;
-            bool waterFound = false;
-
-            glm::vec3 pos = playerEntity->localTransform.position;
-            int ix = static_cast<int>(std::floor(pos.x));
-            int iy = static_cast<int>(std::floor(pos.y));
-            int iz = static_cast<int>(std::floor(pos.z));
-
-            for (int dx = -6; dx <= 6; ++dx)
-            {
-                for (int dy = -3; dy <= 3; ++dy)
+                if (player->isUnderwater)
                 {
-                    for (int dz = -6; dz <= 6; ++dz)
+                    player->waterDamageTimer += (float)deltaTime;
+                    while (player->waterDamageTimer >= player->waterDamageInterval)
                     {
-                        if (terrainWorld.getBlock(ix + dx, iy + dy, iz + dz) == voxel::WATER)
+                        player->health -= player->waterDamageAmount;
+                        player->shakeTimer = 0.5f;
+                        player->shakeIntensity = 0.2f;
+                        player->waterDamageTimer -= player->waterDamageInterval;
+
+                        if (player->health <= 0.0f)
                         {
-                            float distSq = (float)(dx * dx + dy * dy + dz * dz);
-                            if (distSq < minDistanceSq)
+                            player->health = 0.0f;
+                            player->isAlive = false;
+                            player->gameState = our::GameState::LOSE;
+                            break;
+                        }
+                    }
+                }
+                else if (player->waterDamageTimer > 0.0f)
+                {
+                    player->waterDamageTimer = 0.0f;
+                }
+
+                updateMeatDecay(player, (float)deltaTime);
+
+                // Dynamic ambient sound based on distance to nearest water
+                float maxRadius = 10.0f;
+                float minDistanceSq = maxRadius * maxRadius;
+                bool waterFound = false;
+
+                glm::vec3 pos = playerEntity->localTransform.position;
+                int ix = static_cast<int>(std::floor(pos.x));
+                int iy = static_cast<int>(std::floor(pos.y));
+                int iz = static_cast<int>(std::floor(pos.z));
+
+                for (int dx = -6; dx <= 6; ++dx)
+                {
+                    for (int dy = -3; dy <= 3; ++dy)
+                    {
+                        for (int dz = -6; dz <= 6; ++dz)
+                        {
+                            if (terrainWorld.getBlock(ix + dx, iy + dy, iz + dz) == voxel::WATER)
                             {
-                                minDistanceSq = distSq;
-                                waterFound = true;
+                                float distSq = (float)(dx * dx + dy * dy + dz * dz);
+                                if (distSq < minDistanceSq)
+                                {
+                                    minDistanceSq = distSq;
+                                    waterFound = true;
+                                }
                             }
                         }
                     }
                 }
+
+                float volume = 0.0f;
+                if (waterFound)
+                {
+                    float distance = std::sqrt(minDistanceSq);
+                    volume = 1.0f - (distance / maxRadius);
+                    if (volume < 0.0f)
+                        volume = 0.0f;
+                }
+                our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
             }
 
-            float volume = 0.0f;
-            if (waterFound)
-            {
-                float distance = std::sqrt(minDistanceSq);
-                volume = 1.0f - (distance / maxRadius);
-                if (volume < 0.0f)
-                    volume = 0.0f;
-            }
-            our::AudioSystem::setLoopingSoundVolume("water_ambient", volume);
+            
+            // Update NPC movement using the dedicated system
+            npcMovementSystem.update(&engineWorld, (float)deltaTime);
         }
 
-        // Update NPC movement using the dedicated system
-        npcMovementSystem.update(&engineWorld, (float)deltaTime);
+        std::cout << "in play state update" << std::endl;
+        auto &keyboard = getApp()->getKeyboard();
+        
+        if (!isPlaying && player) {
+            if (keyboard.justPressed(GLFW_KEY_R)) {
+                if (player->gameState == our::GameState::WIN) {
+                    std::cout << "in win " << getApp() << std::endl;
+                    getApp()->changeState("play");
+                    return;
+                } else if (player->gameState == our::GameState::LOSE) {
+                    std::cout << "in lose " << getApp() << std::endl;
+                    player->gameState = our::GameState::PLAYING;
+                    player->health = player->maxHealth;
+                    player->isAlive = true;
+                }
+            }
+            if (keyboard.justPressed(GLFW_KEY_ESCAPE)) {
+                getApp()->changeState("menu");
+                return;
+            }
+        } else {
+            // inventory system
+            if (keyboard.justPressed(GLFW_KEY_E) && isPlaying)
+            {
+                isInventoryOpen = !isInventoryOpen;
+                if (isInventoryOpen)
+                {
+                    cameraController.exit();
+                }
+                else
+                {
+                    cameraController.enter(getApp());
+                }
+            }
+
+            if (keyboard.justPressed(GLFW_KEY_ESCAPE)) {
+                getApp()->changeState("menu");
+                return;
+            }
+        }
 
         auto &mouse = getApp()->getMouse();
         if (playerEntity)
@@ -1374,50 +1482,51 @@ class Playstate : public our::State
             glm::mat4 camMat = playerEntity->localTransform.toMat4();
             glm::vec3 camPos = playerEntity->localTransform.position;
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
-            our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
 
             // Hand Animation Logic
             bool triggerHitPulse = false;
-            if (mouse.justPressed(0) || mouse.justPressed(1))
-            {
-                triggerHitPulse = true;
-            }
-
-            // Highlight Hovered Block
-            voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, 2.0f);
-            if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
-            {
-                glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
-                highlightEntity->localTransform.position = pos;
-                highlightEdgesEntity->localTransform.position = pos;
-            }
-            else
-            {
-                if (highlightEntity)
-                    highlightEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
-                if (highlightEdgesEntity)
-                    highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
-            }
-
-            // Break Block / Kill NPC (disabled underwater)
-            if (mouse.justPressed(0) && player && !player->isUnderwater)
-            {
-                our::Entity *hitEnemy = findHitEnemy(camPos, camDir, 2.5f);
-                if (hitEnemy)
+            
+            if (isPlaying) {
+                if (mouse.justPressed(0) || mouse.justPressed(1))
                 {
-                    damageEnemyAndAwardXP(hitEnemy, player);
                     triggerHitPulse = true;
                 }
-                else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
+
+                // Highlight Hovered Block
+                voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
                 {
-                    killNPCAndAwardMeat(hitNPC, player);
-                    our::AudioSystem::playSound("assets/sounds/Death.wav");
+                    glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
+                    highlightEntity->localTransform.position = pos;
+                    highlightEdgesEntity->localTransform.position = pos;
                 }
-            }
-            if (mouse.isPressed(0))
-            {
-                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
-                if (hit.hit)
+                else
+                {
+                    if (highlightEntity)
+                        highlightEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+                    if (highlightEdgesEntity)
+                        highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+                }
+
+                // Break Block / Kill NPC (disabled underwater)
+                if (mouse.justPressed(0) && player && !player->isUnderwater)
+                {
+                    our::Entity *hitEnemy = findHitEnemy(camPos, camDir, 2.5f);
+                    if (hitEnemy)
+                    {
+                        damageEnemyAndAwardXP(hitEnemy, player);
+                        triggerHitPulse = true;
+                    }
+                    else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
+                    {
+                        killNPCAndAwardMeat(hitNPC, player);
+                        our::AudioSystem::playSound("assets/sounds/Death.wav");
+                    }
+                }
+                if (mouse.isPressed(0))
+                {
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                    if (hit.hit)
                 {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
                     auto holdResult = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime);
@@ -1448,24 +1557,34 @@ class Playstate : public our::State
                             our::AudioSystem::playSound("assets/sounds/Hit.wav");
                     }
                 }
-            }
-            else if (mouse.justReleased(0))
-            {
-                blockInteraction.currentTargetContext = {-1, -1, -1};
-                blockInteraction.accumulatedBreakTime = 0.0f;
-            }
-
-            if (mouse.justPressed(1) && player && !player->isUnderwater)
-            {
-                voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
-                int placeType = hotbarBlockType(player->inventoryHotbarSlot);
-                int *stack = inventoryCountForType(player, placeType);
-                if (hit.hit && stack && *stack > 0)
+                else if (mouse.justReleased(0))
                 {
-                    terrainWorld.placeBlock(hit, placeType);
-                    (*stack)--;
-                    terrainMeshDirty = true;
+                    blockInteraction.currentTargetContext = {-1, -1, -1};
+                    blockInteraction.accumulatedBreakTime = 0.0f;
                 }
+
+                if (mouse.justPressed(1) && player && !player->isUnderwater)
+                {
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                    int placeType = hotbarBlockType(player->inventoryHotbarSlot);
+                    int *stack = inventoryCountForType(player, placeType);
+                    if (hit.hit && stack && *stack > 0)
+                    {
+                        terrainWorld.placeBlock(hit, placeType);
+                        (*stack)--;
+                        terrainMeshDirty = true;
+                    }
+                }
+            } else {
+                if (mouse.justReleased(0))
+                {
+                    blockInteraction.currentTargetContext = {-1, -1, -1};
+                    blockInteraction.accumulatedBreakTime = 0.0f;
+                }
+                if (highlightEntity)
+                    highlightEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
+                if (highlightEdgesEntity)
+                    highlightEdgesEntity->localTransform.position = glm::vec3(0.0f, -1000.0f, 0.0f);
             }
 
             // Hand Animation & Interaction Update
@@ -1555,7 +1674,8 @@ class Playstate : public our::State
             {
                 std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void *)handEntity << " handComp=" << (void *)handComp << "\n";
             }
-        }
+        } // Close if (isPlaying)
+        } // Close if (playerEntity)
 
         if (terrainMeshDirty)
             rebuildMesh();
@@ -1568,9 +1688,7 @@ class Playstate : public our::State
             renderer.render(&engineWorld);
             return; // Exit early!
         }
-        if (keyboard.justPressed(GLFW_KEY_ESCAPE))
-            getApp()->changeState("menu");
-    }
+    } // Close onDraw
 
     void onKeyEvent(int key, int scancode, int action, int mods) override
     {
@@ -1603,8 +1721,31 @@ class Playstate : public our::State
         cameraController.exit();
         playerController.exit();
         engineWorld.clear();
+        
         if (highlightEdgesMesh)
+        {
             delete highlightEdgesMesh;
+            highlightEdgesMesh = nullptr;
+        }
+
+        // --- Clear states that persist between game runs ---
+        terrainWorld.activeChunks.clear();
+        npcTemplates.clear();
+        
+        currentCenterChunkX = std::numeric_limits<int>::min();
+        currentCenterChunkZ = std::numeric_limits<int>::min();
+        terrainMeshDirty = true;
+        
+        levelUpNotificationTime = 0.0f;
+        displayedLevel = 1;
+        levelTargetPopupTime = 0.0f;
+        currentLevelTarget = 0;
+        
+        handAnimTime = 0.0f;
+        hitAnimTime = 0.0f;
+        isHitting = false;
+        isInventoryOpen = false;
+
         our::clearAllAssets();
     }
 };
