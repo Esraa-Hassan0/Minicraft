@@ -34,6 +34,14 @@ public:
     void initialize(our::World* engineWorld) {
     }
 
+    void destroy() {
+        particles.clear();
+        currentTargetContext = {-1, -1, -1};
+        currentHits = 0;
+        accumulatedBreakTime = 0.0f;
+        particleSpawnTimer = 0.0f;
+    }
+
     float getBreakDuration(int blockType, int toolType = 0) {
         float break_duration=0.4;
         switch (blockType) {
