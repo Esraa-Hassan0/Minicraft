@@ -183,6 +183,13 @@ namespace our
                 playerPos = playerEntity->localTransform.position;
         }
 
+        void destroy()
+        {
+            playerEntity = nullptr;
+            terrainWorld = nullptr;
+            playerPos = glm::vec3(0.0f);
+        }
+
         void update(our::World *world, float deltaTime)
         {
             if (!playerEntity)
