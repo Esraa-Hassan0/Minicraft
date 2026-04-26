@@ -34,6 +34,14 @@ public:
     void initialize(our::World* engineWorld) {
     }
 
+    void destroy() {
+        particles.clear();
+        currentTargetContext = {-1, -1, -1};
+        currentHits = 0;
+        accumulatedBreakTime = 0.0f;
+        particleSpawnTimer = 0.0f;
+    }
+
     float getBreakDuration(int blockType, int toolType = 0) {
         float break_duration=0.4;
         switch (blockType) {
@@ -150,11 +158,13 @@ public:
     }
 
     void update(float deltaTime, our::World* engineWorld) {
+        std::cout << "in play state onDraw " << std::endl;
         // Process existing particles and clean them up when life ends
         for (auto it = particles.begin(); it != particles.end();) {
             it->timeToLive -= deltaTime;
             if (it->timeToLive <= 0) {
                 engineWorld->markForRemoval(it->entity);
+                std::cout << "in play state onDraw inside the loop" << std::endl;
                 it = particles.erase(it);
             } else {
                 auto* mov = it->entity->getComponent<our::MovementComponent>();

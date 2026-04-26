@@ -1723,6 +1723,8 @@ class Playstate : public our::State
         clearAllChunkRenderGroups();
         engineWorld.deleteMarkedEntities();
         enemySystem.destroy();
+        npcMovementSystem.destroy();
+        blockInteraction.destroy();
         renderer.destroy();
         cameraController.exit();
         playerController.exit();
