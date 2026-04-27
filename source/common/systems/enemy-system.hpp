@@ -842,6 +842,7 @@ private:
         player->shakeTimer = 0.3f;
         player->shakeIntensity = 0.2f;
         player->health -= damage;
+        our::AudioSystem::playSound("assets/sounds/life_loss.mp3");
         if (player->health <= 0.0f) {
             player->health    = 0.0f;
             bool wasAlive = player->isAlive;

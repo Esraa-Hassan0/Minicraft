@@ -52,6 +52,7 @@ class Playstate : public our::State
         std::string npcType;
         float speed, moveRadius, waitTime;
         std::string movementType;
+        bool isFlying = false;
         glm::vec3 aabbCenter;
         glm::vec3 aabbHalfSize;
     };
@@ -152,6 +153,7 @@ class Playstate : public our::State
             if (player->resourcesCollected >= player->resourcesRequired)
             {
                 player->gameState = our::GameState::WIN;
+                our::AudioSystem::playSound("assets/sounds/vectory.mp3");
             }
         }
     }
@@ -464,7 +466,7 @@ class Playstate : public our::State
             enemy->deadTimer = 0.0f;
             enemy->velocity = glm::vec3(0.0f);
             awardLevel2KillXP(player);
-            our::AudioSystem::playSound("assets/sounds/Death.wav");
+            our::AudioSystem::playSound("assets/sounds/kill.mp3");
         }
         else
         {
@@ -485,6 +487,9 @@ class Playstate : public our::State
                 continue;
             auto *killable = entity->getComponent<our::KillableNPCComponent>();
             if (!killable)
+                continue;
+
+            if (killable->npcType == "cat" || killable->npcType == "frog" || killable->npcType == "bee")
                 continue;
 
             glm::vec3 npcPos = entity->localTransform.position;
@@ -556,6 +561,7 @@ class Playstate : public our::State
             else
             {
                 player->health = std::max(0.0f, player->health - 10.0f);
+                our::AudioSystem::playSound("assets/sounds/life_loss.mp3");
                 player->shakeTimer = 0.5f;
                 player->shakeIntensity = 0.2f;
                 if (player->health <= 0.0f)
@@ -626,8 +632,8 @@ class Playstate : public our::State
 
         std::random_device rd;
         std::mt19937 gen(rd());
-        // Reduce NPCs per chunk to make distribution less dense
-        std::uniform_int_distribution<> npcCountDist(0, 1);
+        // Increase NPCs per chunk to make distribution more dense
+        std::uniform_int_distribution<> npcCountDist(1, 3);
         std::uniform_int_distribution<> templateDist(0, static_cast<int>(npcTemplates.size()) - 1);
 
         int numNPCs = npcCountDist(gen);
@@ -645,6 +651,9 @@ class Playstate : public our::State
             }
             if (ly < 0)
                 continue;
+
+            // Pick a template
+            const auto &templateData = npcTemplates[templateDist(gen)];
 
             // Check if water is nearby (within 3 blocks)
             bool nearWater = false;
@@ -664,14 +673,19 @@ class Playstate : public our::State
                     }
                 }
             }
-            if (nearWater)
-                continue;
+
+            int blockUnder = terrainWorld.getBlock(checkX, ly, checkZ);
+            if (blockUnder == voxel::WATER)
+                continue; // no one spawns IN water
+
+            if (templateData.npcType == "frog") {
+                if (!nearWater) continue; // frogs MUST spawn near water
+            } else {
+                if (nearWater) continue; // other NPCs avoid water
+            }
 
             float worldX = cx * voxel::Chunk::CHUNK_SIZE + lx + 0.5f;
             float worldZ = cz * voxel::Chunk::CHUNK_SIZE + lz + 0.5f;
-
-            // Pick a template
-            const auto &templateData = npcTemplates[templateDist(gen)];
 
             // Compute Y so the collider bottom sits slightly above the block top
             float blockTopY = ly + 1.0f;
@@ -707,6 +721,8 @@ class Playstate : public our::State
                 movement->movementType = our::NPCMovementComponent::MovementType::FOLLOW_PLAYER;
             else
                 movement->movementType = our::NPCMovementComponent::MovementType::RANDOM_WALK;
+
+            movement->isFlying = templateData.isFlying;
 
             auto *killable = npcEntity->addComponent<our::KillableNPCComponent>();
             killable->foodReward = templateData.foodReward;
@@ -821,6 +837,7 @@ class Playstate : public our::State
                     templateData.moveRadius = mov.value("moveRadius", 5.0f);
                     templateData.waitTime = mov.value("waitTime", 2.0f);
                     templateData.movementType = mov.value("movementType", "random_walk");
+                    templateData.isFlying = mov.value("isFlying", false);
                 }
                 else
                 {
@@ -1370,6 +1387,7 @@ class Playstate : public our::State
                     while (player->waterDamageTimer >= player->waterDamageInterval)
                     {
                         player->health -= player->waterDamageAmount;
+                        our::AudioSystem::playSound("assets/sounds/life_loss.mp3");
                         player->shakeTimer = 0.5f;
                         player->shakeIntensity = 0.2f;
                         player->waterDamageTimer -= player->waterDamageInterval;
@@ -1520,7 +1538,7 @@ class Playstate : public our::State
                     else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
                     {
                         killNPCAndAwardMeat(hitNPC, player);
-                        our::AudioSystem::playSound("assets/sounds/Death.wav");
+                        our::AudioSystem::playSound("assets/sounds/death.wav");
                     }
                 }
                 if (mouse.isPressed(0))
