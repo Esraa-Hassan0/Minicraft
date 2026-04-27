@@ -105,6 +105,24 @@
                         1
                     ]
                 },
+                "explosion-fire": {
+                    "type": "tinted",
+                    "shader": "tinted",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": false
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1.0,
+                        0.6,
+                        0.1,
+                        1.0
+                    ]
+                },
                 "lit-red": {
                     "type": "lit",
                     "shader": "lit",
