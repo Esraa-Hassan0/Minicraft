@@ -908,9 +908,27 @@ namespace our
             {
                 enemy->fuseTimer += dt;
 
+                auto *light = entity->getComponent<LightComponent>();
+                if (!light) {
+                    light = entity->addComponent<LightComponent>();
+                    light->type = LightType::SPOT;
+                    light->ambient = glm::vec3(0.1f, 0.0f, 0.0f);
+                    light->attenConstant = 1.0f;
+                    light->attenLinear = 0.09f;
+                    light->attenQuadratic = 0.032f;
+                    light->enabled = true;
+                }
+
                 // Flash the creeper (scale pulse)
                 float pulse = std::sin(enemy->fuseTimer * 10.0f) * 0.1f + 1.0f;
                 entity->localTransform.scale = glm::vec3(pulse);
+
+                // Pulse the creeper alarm spotlight (red, sweeping slightly)
+                if (light) {
+                    light->color = glm::vec3(pulse * 3.0f, 0.1f, 0.1f);
+                    light->innerCutoffDeg = 20.0f + pulse * 10.0f;
+                    light->outerCutoffDeg = 35.0f + pulse * 15.0f;
+                }
 
                 if (enemy->fuseTimer >= enemy->fuseTime)
                 {
@@ -1158,11 +1176,11 @@ namespace our
                 if (!mr->material)
                     mr->material = AssetLoader<Material>::get("metal");
 
-                // Attach point light to every 3rd particle for intense flame glow
+                // Attach spot light to select particles for intense sweeping flame beams
                 if ((i & 2) == 0)
                 {
                     auto *light = p->addComponent<LightComponent>();
-                    light->type = LightType::POINT;
+                    light->type = LightType::SPOT; // Changed to SPOT light
                     // HDR-like bright fire color (multiplied for intensity)
                     light->color = glm::vec3(col.r * 3.0f, col.g * 2.0f, col.b * 0.8f);
                     light->ambient = glm::vec3(0.4f, 0.2f, 0.05f);
@@ -1170,6 +1188,11 @@ namespace our
                     light->attenConstant = 1.0f;
                     light->attenLinear = 0.09f;
                     light->attenQuadratic = 0.032f;
+                    
+                    // Spot light cone angles
+                    light->innerCutoffDeg = 15.0f;
+                    light->outerCutoffDeg = 45.0f;
+
                     light->enabled = true;
                 }
             }

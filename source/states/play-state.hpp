@@ -1538,7 +1538,7 @@ class Playstate : public our::State
                     else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
                     {
                         killNPCAndAwardMeat(hitNPC, player);
-                        our::AudioSystem::playSound("assets/sounds/death.wav");
+                        our::AudioSystem::playSound("assets/sounds/Death.wav");
                     }
                 }
                 if (mouse.isPressed(0))
