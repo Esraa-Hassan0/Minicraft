@@ -970,9 +970,9 @@
                                 "type": "Hand",
                                 "basePosition": [ 0.38, -0.5, -2.0 ],
                                 "baseRotation": [ 110, -15, -20 ],
-                                "interactionRange": 2.0,
+                                "interactionRange": 10.0,
                                 "idleSwayAmplitude": 0.01,
-                                "hitForwardThrust": 0.15
+                                "hitForwardThrust": 1.0
                             }
                         ]
                     }

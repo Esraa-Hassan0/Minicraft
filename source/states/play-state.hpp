@@ -1483,6 +1483,22 @@ class Playstate : public our::State
             glm::vec3 camPos = playerEntity->localTransform.position;
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
 
+            // Get interaction range from hand component or player component
+            float interactRange = 10.0f;  // Default fallback
+            our::Entity *handEntity = nullptr;
+            for (auto entity : engineWorld.getEntities()) {
+                if (!entity) continue;
+                auto *handComp = entity->getComponent<our::HandComponent>();
+                if (handComp) {
+                    interactRange = handComp->interactionRange;
+                    handEntity = entity;
+                    break;
+                }
+            }
+            if (player && interactRange == 10.0f) {
+                interactRange = player->interactionRange;  // Use player's range if hand not found
+            }
+
             // Hand Animation Logic
             bool triggerHitPulse = false;
             
@@ -1493,7 +1509,7 @@ class Playstate : public our::State
                 }
 
                 // Highlight Hovered Block
-                voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, interactRange);
                 if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
                 {
                     glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
@@ -1511,13 +1527,13 @@ class Playstate : public our::State
                 // Break Block / Kill NPC (disabled underwater)
                 if (mouse.justPressed(0) && player && !player->isUnderwater)
                 {
-                    our::Entity *hitEnemy = findHitEnemy(camPos, camDir, 2.5f);
+                    our::Entity *hitEnemy = findHitEnemy(camPos, camDir, interactRange);
                     if (hitEnemy)
                     {
                         damageEnemyAndAwardXP(hitEnemy, player);
                         triggerHitPulse = true;
                     }
-                    else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
+                    else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, interactRange))
                     {
                         killNPCAndAwardMeat(hitNPC, player);
                         our::AudioSystem::playSound("assets/sounds/Death.wav");
@@ -1525,7 +1541,7 @@ class Playstate : public our::State
                 }
                 if (mouse.isPressed(0))
                 {
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, interactRange);
                     if (hit.hit)
                 {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
@@ -1674,8 +1690,8 @@ class Playstate : public our::State
             {
                 std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void *)handEntity << " handComp=" << (void *)handComp << "\n";
             }
-        } // Close if (isPlaying)
-        } // Close if (playerEntity)
+        } 
+        } 
 
         if (terrainMeshDirty)
             rebuildMesh();
@@ -1688,7 +1704,7 @@ class Playstate : public our::State
             renderer.render(&engineWorld);
             return; // Exit early!
         }
-    } // Close onDraw
+    } 
 
     void onKeyEvent(int key, int scancode, int action, int mods) override
     {
