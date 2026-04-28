@@ -38,9 +38,9 @@ namespace our {
                     gravityAcceleration = player->gravityAcceleration;
                     waterGravityMultiplier = player->waterGravityMultiplier;
                 } else if (npc) {
+                    // Flying NPCs manage their own movement entirely — skip gravity
+                    if (npc->isFlying) continue;
                     velocity = &npc->velocity;
-                    // For NPCs we don't have isUnderwater yet, but we can add it if needed
-                    // For now, let's just use a default or dummy
                 }
 
                 if (collider && velocity) {

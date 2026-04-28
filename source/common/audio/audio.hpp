@@ -13,6 +13,8 @@ namespace our
         static void startLoopingSound(const std::string& key, const std::string& filepath);
         static void setLoopingSoundVolume(const std::string& key, float volume);
         static void stopLoopingSound(const std::string& key);
+        static void playEntitySound(const std::string& entityId, const std::string& filepath);
+        static void stopEntitySound(const std::string& entityId);
         static void destroy();
     };
 }
