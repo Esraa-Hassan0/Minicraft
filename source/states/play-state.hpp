@@ -441,7 +441,6 @@ class Playstate : public our::State
                 // Original behavior for other NPCs (increase meat count)
                 player->meatCount += killable->foodReward;
 
-                awardLevel2KillXP(player);
             }
         }
         engineWorld.markForRemoval(npcEntity);
