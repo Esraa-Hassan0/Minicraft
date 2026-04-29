@@ -26,7 +26,7 @@ namespace our {
         }
         
         // Parse interaction parameters
-        interactionRange = data.value("interactionRange", 2.0f);
+        interactionRange = data.value("interactionRange", 10.0f);
         idleSwayAmplitude = data.value("idleSwayAmplitude", 0.01f);
         hitForwardThrust = data.value("hitForwardThrust", 0.15f);
         

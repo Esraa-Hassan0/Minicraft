@@ -22,7 +22,7 @@ namespace our {
 
         // Resources/Inventory system
         int resourcesCollected = 0;
-        int resourcesRequired = 5; // Win condition: collect this many resources
+        int resourcesRequired = 100; // Win condition: collect this many resources
 
         int inventoryGrass = 0;
         int inventoryDirt = 0;
@@ -46,7 +46,7 @@ namespace our {
         bool isGrounded = false;
         
         // Interaction system
-        float interactionRange = 5.0f; // How far the player can mine/place blocks
+        float interactionRange = 10.0f; // How far the player can mine/place blocks
         int blockPlacementCooldown = 150; // Milliseconds between block placements
         int timeSinceLastPlacement = 0;
 

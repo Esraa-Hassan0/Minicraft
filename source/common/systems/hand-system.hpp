@@ -172,7 +172,33 @@ namespace our {
             handComp->hasActiveTarget = true;
         }
         
-        // Detect and avoid collision with nearby objects
+        // Helper function to check if a point in world space contains a solid block
+        static bool isBlockSolid(const voxel::World* terrainWorld, const glm::vec3& worldPos) {
+            int bx = static_cast<int>(std::floor(worldPos.x));
+            int by = static_cast<int>(std::floor(worldPos.y));
+            int bz = static_cast<int>(std::floor(worldPos.z));
+            int blockType = terrainWorld->getBlock(bx, by, bz);
+            return (blockType != voxel::AIR && blockType != voxel::WATER);
+        }
+        
+        // Helper function to check if a path is clear (multiple samples)
+        static bool isPathClear(
+            const voxel::World* terrainWorld,
+            const glm::vec3& startPos,
+            const glm::vec3& endPos,
+            int samples = 3
+        ) {
+            for (int i = 1; i <= samples; ++i) {
+                float t = static_cast<float>(i) / static_cast<float>(samples + 1);
+                glm::vec3 checkPos = glm::mix(startPos, endPos, t);
+                if (isBlockSolid(terrainWorld, checkPos)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        
+        // Detect and avoid collision with nearby objects by moving hand laterally (left/right/up/down)
         static void applyCollisionAvoidance(
             HandComponent* handComp,
             const glm::vec3& cameraPosition,
@@ -180,47 +206,82 @@ namespace our {
             const voxel::World* terrainWorld,
             glm::vec3& position
         ) {
-            // Cast a ray ahead of the hand to detect collisions
-            // We need to transform hand position to world space first
-            // For now, check if there's terrain in front
+            if (!terrainWorld) return;
             
-            float checkDistance = handComp->collisionAvoidanceDistance;
+            float checkDistance = handComp->collisionAvoidanceDistance * 1.5f;  // Increased lookahead
             
-            // Calculate multiple check points around the hand
-            std::vector<glm::vec3> checkPoints = {
-                cameraPosition + cameraDirection * checkDistance,
-                cameraPosition + cameraDirection * checkDistance + glm::vec3(0.1f, 0.0f, 0.0f),
-                cameraPosition + cameraDirection * checkDistance + glm::vec3(-0.1f, 0.0f, 0.0f),
-                cameraPosition + cameraDirection * checkDistance + glm::vec3(0.0f, 0.1f, 0.0f),
-                cameraPosition + cameraDirection * checkDistance + glm::vec3(0.0f, -0.1f, 0.0f)
-            };
+            // Build local coordinate system for camera
+            glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+            glm::vec3 cameraRight = glm::normalize(glm::cross(cameraDirection, cameraUp));
+            glm::vec3 cameraActualUp = glm::normalize(glm::cross(cameraRight, cameraDirection));
             
-            // Check for terrain blocks at these positions
-            glm::vec3 avoidanceOffset = glm::vec3(0.0f);
-            int collisionCount = 0;
+            // Calculate hand position in world space
+            glm::vec3 handWorldPos = cameraPosition + position;
             
-            for (const auto& checkPoint : checkPoints) {
-                int bx = static_cast<int>(std::floor(checkPoint.x));
-                int by = static_cast<int>(std::floor(checkPoint.y));
-                int bz = static_cast<int>(std::floor(checkPoint.z));
+            // Check for collision ahead
+            glm::vec3 checkPointAhead = handWorldPos + cameraDirection * checkDistance;
+            bool hasCollision = isBlockSolid(terrainWorld, checkPointAhead);
+            
+            // If no collision ahead, check slightly offset to catch nearby walls
+            if (!hasCollision) {
+                glm::vec3 checkPointAheadLeft = handWorldPos + cameraDirection * checkDistance - cameraRight * 0.2f;
+                glm::vec3 checkPointAheadRight = handWorldPos + cameraDirection * checkDistance + cameraRight * 0.2f;
+                hasCollision = isBlockSolid(terrainWorld, checkPointAheadLeft) || 
+                              isBlockSolid(terrainWorld, checkPointAheadRight);
+            }
+            
+            glm::vec3 targetOffset = glm::vec3(0.0f);
+            
+            if (hasCollision) {
+                float offsetAmount = 0.35f;  // Larger offset to ensure clear movement
                 
-                int blockType = terrainWorld->getBlock(bx, by, bz);
-                
-                // If solid block detected, push hand away
-                if (blockType != voxel::AIR && blockType != voxel::WATER) {
-                    avoidanceOffset -= cameraDirection * 0.05f;
-                    collisionCount++;
+                // Try different directions with priority
+                // Priority 1: Left
+                glm::vec3 leftPos = cameraPosition + (position - cameraRight * offsetAmount);
+                if (isPathClear(terrainWorld, cameraPosition + position, leftPos)) {
+                    targetOffset = -cameraRight * offsetAmount;
+                }
+                // Priority 2: Right
+                else {
+                    glm::vec3 rightPos = cameraPosition + (position + cameraRight * offsetAmount);
+                    if (isPathClear(terrainWorld, cameraPosition + position, rightPos)) {
+                        targetOffset = cameraRight * offsetAmount;
+                    }
+                    // Priority 3: Up
+                    else {
+                        glm::vec3 upPos = cameraPosition + (position + cameraActualUp * offsetAmount);
+                        if (isPathClear(terrainWorld, cameraPosition + position, upPos)) {
+                            targetOffset = cameraActualUp * offsetAmount;
+                        }
+                        // Priority 4: Down (for when hand is high up)
+                        else {
+                            glm::vec3 downPos = cameraPosition + (position - cameraActualUp * offsetAmount);
+                            if (isPathClear(terrainWorld, cameraPosition + position, downPos)) {
+                                targetOffset = -cameraActualUp * offsetAmount;
+                            }
+                            // Priority 5: Backward (away from forward direction)
+                            else {
+                                glm::vec3 backPos = cameraPosition + (position - cameraDirection * 0.3f);
+                                if (isPathClear(terrainWorld, cameraPosition + position, backPos)) {
+                                    targetOffset = -cameraDirection * 0.3f;
+                                }
+                            }
+                        }
+                    }
                 }
             }
             
-            // Smooth collision response
+            handComp->hasCollisionAhead = hasCollision;
+            
+            // Fast interpolation to target offset (more responsive collision avoidance)
+            float lerpFactor = glm::min(handComp->collisionSmoothing * 0.032f, 1.0f);  // Faster response
             handComp->collisionAvoidanceOffset = glm::mix(
                 handComp->collisionAvoidanceOffset,
-                avoidanceOffset,
-                handComp->collisionSmoothing * 0.016f  // Assume 60fps, adjust as needed
+                targetOffset,
+                lerpFactor
             );
             
-            // Apply avoidance offset to position
+            // Apply avoidance offset to position (in camera space)
             position += handComp->collisionAvoidanceOffset;
         }
         

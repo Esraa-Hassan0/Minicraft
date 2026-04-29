@@ -1143,33 +1143,37 @@ class Playstate : public our::State
             // Draw Hearts Bar
             ImTextureID heartsTexID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
             float texW = 45.0f;
+            float texH = 9.0f;
 
             int fullHearts = static_cast<int>(player->health / 10.0f);
             float partialHeart = (player->health / 10.0f) - fullHearts;
 
-            ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
-            ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
-            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
-            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
+
+            ImVec2 uvFull0((27.0f ) / texW, (9.0f - 0.5f) / texH);
+            ImVec2 uvFull1((36.0f ) / texW, (0.0f + 0.5f) / texH);
+
+            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, (9.0f - 0.5f) / texH);
+            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, (0.0f + 0.5f) / texH);
 
             for (int i = 0; i < maxHearts; ++i)
             {
                 ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
                 ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
+                
+                // Draw empty heart as background
+                barDl->AddImage(heartsTexID, pMin, pMax, uvEmpty0, uvEmpty1);
+
                 if (i < fullHearts)
                 {
+                    // Draw full heart on top
                     barDl->AddImage(heartsTexID, pMin, pMax, uvFull0, uvFull1);
                 }
                 else if (i == fullHearts && partialHeart > 0.0f)
                 {
-                    ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
-                    ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
-                    barDl->AddImage(heartsTexID, pMin, splitX, uvFull0, uvFull1);
-                    barDl->AddImage(heartsTexID, splitX1, pMax, uvEmpty0, uvEmpty1);
-                }
-                else
-                {
-                    barDl->AddImage(heartsTexID, pMin, pMax, uvEmpty0, uvEmpty1);
+                    // Draw partial full heart over the empty heart
+                    ImVec2 splitMax(pMin.x + heartSize * partialHeart, pMax.y);
+                    ImVec2 uvFullSplit(uvFull0.x + (uvFull1.x - uvFull0.x) * partialHeart, uvFull1.y);
+                    barDl->AddImage(heartsTexID, pMin, splitMax, uvFull0, uvFullSplit);
                 }
             }
 
@@ -1186,13 +1190,14 @@ class Playstate : public our::State
             {
                 ImVec2 pMin(meatStartX + i * (meatSize + meatGap), startY);
                 ImVec2 pMax(pMin.x + meatSize, pMin.y + meatSize);
+                
+                // Draw empty meat as background
+                barDl->AddImage(meatTexID, pMin, pMax, mUvEmpty0, mUvEmpty1);
+
                 if (i < player->meatCount)
                 {
+                    // Draw full meat on top
                     barDl->AddImage(meatTexID, pMin, pMax, mUvFull0, mUvFull1);
-                }
-                else
-                {
-                    barDl->AddImage(meatTexID, pMin, pMax, mUvEmpty0, mUvEmpty1);
                 }
             }
         }
@@ -1501,6 +1506,22 @@ class Playstate : public our::State
             glm::vec3 camPos = playerEntity->localTransform.position;
             glm::vec3 camDir = glm::vec3(camMat * glm::vec4(0, 0, -1, 0));
 
+            // Get interaction range from hand component or player component
+            float interactRange = 10.0f;  // Default fallback
+            our::Entity *handEntity = nullptr;
+            for (auto entity : engineWorld.getEntities()) {
+                if (!entity) continue;
+                auto *handComp = entity->getComponent<our::HandComponent>();
+                if (handComp) {
+                    interactRange = handComp->interactionRange;
+                    handEntity = entity;
+                    break;
+                }
+            }
+            if (player && interactRange == 10.0f) {
+                interactRange = player->interactionRange;  // Use player's range if hand not found
+            }
+
             // Hand Animation Logic
             bool triggerHitPulse = false;
             
@@ -1511,7 +1532,7 @@ class Playstate : public our::State
                 }
 
                 // Highlight Hovered Block
-                voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                voxel::RayHit hoverHit = terrainWorld.castRay(camPos, camDir, interactRange);
                 if (hoverHit.hit && highlightEntity && highlightEdgesEntity)
                 {
                     glm::vec3 pos(hoverHit.x + 0.5f, hoverHit.y + 0.5f, hoverHit.z + 0.5f);
@@ -1529,13 +1550,13 @@ class Playstate : public our::State
                 // Break Block / Kill NPC (disabled underwater)
                 if (mouse.justPressed(0) && player && !player->isUnderwater)
                 {
-                    our::Entity *hitEnemy = findHitEnemy(camPos, camDir, 2.5f);
+                    our::Entity *hitEnemy = findHitEnemy(camPos, camDir, interactRange);
                     if (hitEnemy)
                     {
                         damageEnemyAndAwardXP(hitEnemy, player);
                         triggerHitPulse = true;
                     }
-                    else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, 2.0f))
+                    else if (our::Entity *hitNPC = findHitNPC(camPos, camDir, interactRange))
                     {
                         killNPCAndAwardMeat(hitNPC, player);
                         our::AudioSystem::playSound("assets/sounds/Death.wav");
@@ -1543,7 +1564,7 @@ class Playstate : public our::State
                 }
                 if (mouse.isPressed(0))
                 {
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
+                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, interactRange);
                     if (hit.hit)
                 {
                     int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
@@ -1692,8 +1713,8 @@ class Playstate : public our::State
             {
                 std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void *)handEntity << " handComp=" << (void *)handComp << "\n";
             }
-        } // Close if (isPlaying)
-        } // Close if (playerEntity)
+        } 
+        } 
 
         if (terrainMeshDirty)
             rebuildMesh();
@@ -1706,7 +1727,7 @@ class Playstate : public our::State
             renderer.render(&engineWorld);
             return; // Exit early!
         }
-    } // Close onDraw
+    } 
 
     void onKeyEvent(int key, int scancode, int action, int mods) override
     {
