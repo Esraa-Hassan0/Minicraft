@@ -135,8 +135,16 @@ class Playstate : public our::State
 
     void registerCollectedBlock(our::PlayerComponent *player, int blockType)
     {
-        // Level 3: Collecting Diamond fills XP to complete leveling
-        if (player && player->level == 3 && blockType == voxel::Diamond)
+        // Collecting a Diamond block immediately triggers a WIN condition
+        if (player && blockType == voxel::Diamond)
+        {
+            player->gameState = our::GameState::WIN;
+            our::AudioSystem::playSound("assets/sounds/vectory.mp3");
+            return;
+        }
+
+        // Level 3: Collecting any other block after reaching level 3
+        if (player && player->level == 3)
         {
             player->currentXP = 1.0f;
             player->level = 4;
@@ -150,11 +158,6 @@ class Playstate : public our::State
         {
             (*slot)++;
             player->resourcesCollected++;
-            if (player->resourcesCollected >= player->resourcesRequired)
-            {
-                player->gameState = our::GameState::WIN;
-                our::AudioSystem::playSound("assets/sounds/vectory.mp3");
-            }
         }
     }
 
@@ -198,6 +201,8 @@ class Playstate : public our::State
             return our::AssetLoader<our::Material>::get("log");
         case voxel::LEAF:
             return our::AssetLoader<our::Material>::get("leaf");
+        case voxel::Diamond:
+            return our::AssetLoader<our::Material>::get("diamond");
         default:
             return our::AssetLoader<our::Material>::get("default");
         }
