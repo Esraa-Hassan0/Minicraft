@@ -1143,33 +1143,37 @@ class Playstate : public our::State
             // Draw Hearts Bar
             ImTextureID heartsTexID = (ImTextureID)(intptr_t)heartsTex->getOpenGLName();
             float texW = 45.0f;
+            float texH = 9.0f;
 
             int fullHearts = static_cast<int>(player->health / 10.0f);
             float partialHeart = (player->health / 10.0f) - fullHearts;
 
-            ImVec2 uvFull0((27.0f + 0.5f) / texW, 1.0f);
-            ImVec2 uvFull1((36.0f - 0.5f) / texW, 0.0f);
-            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, 1.0f);
-            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, 0.0f);
+
+            ImVec2 uvFull0((27.0f ) / texW, (9.0f - 0.5f) / texH);
+            ImVec2 uvFull1((36.0f ) / texW, (0.0f + 0.5f) / texH);
+
+            ImVec2 uvEmpty0((0.0f + 0.5f) / texW, (9.0f - 0.5f) / texH);
+            ImVec2 uvEmpty1((9.0f - 0.5f) / texW, (0.0f + 0.5f) / texH);
 
             for (int i = 0; i < maxHearts; ++i)
             {
                 ImVec2 pMin(startX + i * (heartSize + heartGap), startY);
                 ImVec2 pMax(pMin.x + heartSize, pMin.y + heartSize);
+                
+                // Draw empty heart as background
+                barDl->AddImage(heartsTexID, pMin, pMax, uvEmpty0, uvEmpty1);
+
                 if (i < fullHearts)
                 {
+                    // Draw full heart on top
                     barDl->AddImage(heartsTexID, pMin, pMax, uvFull0, uvFull1);
                 }
                 else if (i == fullHearts && partialHeart > 0.0f)
                 {
-                    ImVec2 splitX(pMin.x + heartSize * partialHeart, pMin.y);
-                    ImVec2 splitX1(pMin.x + heartSize * partialHeart, pMax.y);
-                    barDl->AddImage(heartsTexID, pMin, splitX, uvFull0, uvFull1);
-                    barDl->AddImage(heartsTexID, splitX1, pMax, uvEmpty0, uvEmpty1);
-                }
-                else
-                {
-                    barDl->AddImage(heartsTexID, pMin, pMax, uvEmpty0, uvEmpty1);
+                    // Draw partial full heart over the empty heart
+                    ImVec2 splitMax(pMin.x + heartSize * partialHeart, pMax.y);
+                    ImVec2 uvFullSplit(uvFull0.x + (uvFull1.x - uvFull0.x) * partialHeart, uvFull1.y);
+                    barDl->AddImage(heartsTexID, pMin, splitMax, uvFull0, uvFullSplit);
                 }
             }
 
@@ -1186,13 +1190,14 @@ class Playstate : public our::State
             {
                 ImVec2 pMin(meatStartX + i * (meatSize + meatGap), startY);
                 ImVec2 pMax(pMin.x + meatSize, pMin.y + meatSize);
+                
+                // Draw empty meat as background
+                barDl->AddImage(meatTexID, pMin, pMax, mUvEmpty0, mUvEmpty1);
+
                 if (i < player->meatCount)
                 {
+                    // Draw full meat on top
                     barDl->AddImage(meatTexID, pMin, pMax, mUvFull0, mUvFull1);
-                }
-                else
-                {
-                    barDl->AddImage(meatTexID, pMin, pMax, mUvEmpty0, mUvEmpty1);
                 }
             }
         }
