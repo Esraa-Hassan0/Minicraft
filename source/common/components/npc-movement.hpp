@@ -44,6 +44,13 @@ namespace our
         // The system converts it to an absolute targetPosition on first frame.
         glm::vec3 patrolOffset = glm::vec3(5.0f, 0.0f, 0.0f);
 
+        bool isFlying = false;
+
+        // Bobbing/hovering parameters for flying NPCs
+        float bobTimer = 0.0f;
+        float bobFrequency = 4.0f;    // oscillations per second
+        float bobAmplitude = 1.5f;    // vertical displacement strength
+
         static std::string getID() { return "NPCMovementComponent"; }
 
         void deserialize(const nlohmann::json &data) override
@@ -72,6 +79,7 @@ namespace our
                     data["patrolOffset"][1].get<float>(),
                     data["patrolOffset"][2].get<float>());
             }
+            isFlying = data.value("isFlying", isFlying);
         }
     };
 }

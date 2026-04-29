@@ -10,6 +10,7 @@ namespace our
     static ma_engine engine;
     static bool isInitialized = false;
     static std::unordered_map<std::string, ma_sound> loopingSounds;
+    static std::unordered_map<std::string, ma_sound> entitySounds;
 
     void AudioSystem::initialize()
     {
@@ -72,6 +73,30 @@ namespace our
         }
     }
 
+    void AudioSystem::playEntitySound(const std::string& entityId, const std::string& filepath)
+    {
+        if (!isInitialized) return;
+        
+        if (entitySounds.find(entityId) == entitySounds.end()) {
+            ma_result result = ma_sound_init_from_file(&engine, filepath.c_str(), MA_SOUND_FLAG_DECODE | MA_SOUND_FLAG_ASYNC, NULL, NULL, &entitySounds[entityId]);
+            if (result != MA_SUCCESS) {
+                return;
+            }
+        }
+        
+        ma_sound_seek_to_pcm_frame(&entitySounds[entityId], 0);
+        ma_sound_start(&entitySounds[entityId]);
+    }
+
+    void AudioSystem::stopEntitySound(const std::string& entityId)
+    {
+        if (!isInitialized) return;
+        auto it = entitySounds.find(entityId);
+        if (it != entitySounds.end()) {
+            ma_sound_stop(&it->second);
+        }
+    }
+
     void AudioSystem::destroy()
     {
         if (isInitialized) {
@@ -79,6 +104,10 @@ namespace our
                 ma_sound_uninit(&pair.second);
             }
             loopingSounds.clear();
+            for (auto& pair : entitySounds) {
+                ma_sound_uninit(&pair.second);
+            }
+            entitySounds.clear();
             ma_engine_uninit(&engine);
             isInitialized = false;
             std::cout << "Miniaudio engine destroyed." << std::endl;

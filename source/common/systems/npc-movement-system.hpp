@@ -6,9 +6,11 @@
 #include "../components/aabb-collider.hpp"
 #include "../voxel/world.hpp"
 #include "../voxel/types.hpp"
+#include "../audio/audio.hpp"
 
 #include <cstdlib>
 #include <ctime>
+#include <cmath>
 
 namespace our
 {
@@ -220,6 +222,38 @@ namespace our
             {
                 if (!entity)
                     continue;
+
+                auto *killable = entity->getComponent<our::KillableNPCComponent>();
+                if (killable)
+                {
+                    killable->soundTimer -= deltaTime;
+                    float dist = glm::distance(playerPos, entity->localTransform.position);
+                    std::string entityId = "entity_" + std::to_string((size_t)entity);
+
+                    if (dist > 1.5f) {
+                        our::AudioSystem::stopEntitySound(entityId);
+                    }
+
+                    if (killable->soundTimer <= 0.0f)
+                    {
+                        if (dist <= 1.5f) // Within roughly 1 block distance
+                        {
+                            if (killable->npcType == "pig") our::AudioSystem::playEntitySound(entityId, "assets/sounds/pig.mp3");
+                            else if (killable->npcType == "chicken") our::AudioSystem::playEntitySound(entityId, "assets/sounds/chicken.mp3");
+                            else if (killable->npcType == "cat") our::AudioSystem::playEntitySound(entityId, "assets/sounds/cat.mp3");
+                            else if (killable->npcType == "sheep") our::AudioSystem::playEntitySound(entityId, "assets/sounds/sheep.mp3");
+                            else if (killable->npcType == "horse") our::AudioSystem::playEntitySound(entityId, "assets/sounds/horse.mp3");
+                            else if (killable->npcType == "frog") our::AudioSystem::playEntitySound(entityId, "assets/sounds/frog.mp3");
+
+                            killable->soundTimer = 2.0f + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / 3.0f)); // 2 to 5 seconds
+                        }
+                        else
+                        {
+                            killable->soundTimer = 0.5f; // Check again soon if outside range
+                        }
+                    }
+                }
+
                 auto *movement = entity->getComponent<our::NPCMovementComponent>();
                 if (!movement)
                     continue;
@@ -231,27 +265,33 @@ namespace our
                         movement->targetPosition = movement->startPosition + movement->patrolOffset;
                     else
                         movement->targetPosition = movement->startPosition;
-                    // Zero Y on waypoints - gravity owns vertical position
-                    movement->startPosition.y = 0.0f;
-                    movement->targetPosition.y = 0.0f;
+                    if (!movement->isFlying) {
+                        // Zero Y on waypoints - gravity owns vertical position
+                        movement->startPosition.y = 0.0f;
+                        movement->targetPosition.y = 0.0f;
+                    }
                     movement->initialized = true;
                 }
 
                 // Update jump timer and opportunistic jumping
-                movement->jumpTimer += deltaTime;
-                if (movement->isGrounded && movement->jumpTimer >= movement->jumpCooldown) {
-                    float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                    if (r < movement->jumpProbability) {
-                        movement->velocity.y = movement->jumpForce;
-                        movement->isGrounded = false;
-                        movement->jumpTimer = 0.0f;
-                    } else {
-                        // reset timer even if not jumping to avoid constant checks
-                        movement->jumpTimer = 0.0f;
+                if (!movement->isFlying) {
+                    movement->jumpTimer += deltaTime;
+                    if (movement->isGrounded && movement->jumpTimer >= movement->jumpCooldown) {
+                        float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                        if (r < movement->jumpProbability) {
+                            movement->velocity.y = movement->jumpForce;
+                            movement->isGrounded = false;
+                            movement->jumpTimer = 0.0f;
+                        } else {
+                            // reset timer even if not jumping to avoid constant checks
+                            movement->jumpTimer = 0.0f;
+                        }
                     }
                 }
 
-                applyGravity(entity, movement, deltaTime);
+                if (!movement->isFlying) {
+                    applyGravity(entity, movement, deltaTime);
+                }
 
                 switch (movement->movementType)
                 {
@@ -332,6 +372,10 @@ namespace our
     private:
         void updateRandomWalk(our::Entity *entity, our::NPCMovementComponent *movement, float deltaTime)
         {
+            if (movement->isFlying) {
+                updateRandomWalkFlying(entity, movement, deltaTime);
+                return;
+            }
 
             if (!movement->isMoving)
             {
@@ -388,6 +432,68 @@ namespace our
             }
         }
 
+        // Flying-specific random walk: continuous 3D movement with bobbing, never stops
+        void pickNewFlyTarget(our::NPCMovementComponent *movement, our::Entity *entity)
+        {
+            // Fly at player's eye level height
+            float targetHeight = playerPos.y + 1.7f;
+
+            for (int attempt = 0; attempt < 5; attempt++) {
+                float angle = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f * 3.14159265f;
+                float dist = 2.0f + static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * movement->moveRadius;
+                // Small random height variation around eye level (-0.3 to +0.3)
+                float yVariation = (static_cast<float>(rand()) / static_cast<float>(RAND_MAX) - 0.5f) * 0.6f;
+                glm::vec3 newTarget;
+                newTarget.x = movement->startPosition.x + std::cos(angle) * dist;
+                newTarget.y = targetHeight + yVariation;
+                newTarget.z = movement->startPosition.z + std::sin(angle) * dist;
+                if (isValidNPCPosition(entity, newTarget)) {
+                    movement->targetPosition = newTarget;
+                    return;
+                }
+            }
+            // Fallback: hover at eye level above start
+            movement->targetPosition = glm::vec3(movement->startPosition.x, targetHeight, movement->startPosition.z);
+        }
+
+        void updateRandomWalkFlying(our::Entity *entity, our::NPCMovementComponent *movement, float deltaTime)
+        {
+            movement->bobTimer += deltaTime;
+
+            // Always be flying toward a target — pick one immediately if we don't have one
+            if (!movement->isMoving) {
+                pickNewFlyTarget(movement, entity);
+                movement->isMoving = true;
+            }
+
+            glm::vec3 dir = movement->targetPosition - entity->localTransform.position;
+            float dist = glm::length(dir);
+            if (dist > 0.3f)
+            {
+                glm::vec3 moveDir = glm::normalize(dir);
+                glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                // Continuous vertical bobbing (sine wave applied directly, not scaled by deltaTime)
+                float bob = std::sin(movement->bobTimer * movement->bobFrequency) * movement->bobAmplitude * deltaTime;
+                newPos.y += bob;
+
+                if (isValidNPCPosition(entity, newPos))
+                {
+                    entity->localTransform.position = newPos;
+                    movement->blockedAttempts = 0;
+                }
+                else
+                {
+                    // Blocked: immediately pick a new target
+                    pickNewFlyTarget(movement, entity);
+                }
+            }
+            else
+            {
+                // Arrived — immediately pick a new target, no waiting
+                pickNewFlyTarget(movement, entity);
+            }
+        }
+
         void updatePatrol(our::Entity *entity, our::NPCMovementComponent *movement, float deltaTime)
         {
 
@@ -441,27 +547,69 @@ namespace our
 
         void updateFollowPlayer(our::Entity *entity, our::NPCMovementComponent *movement, float deltaTime)
         {
+            if (movement->isFlying) {
+                movement->bobTimer += deltaTime;
+            }
 
-            glm::vec3 toPlayer = playerPos - entity->localTransform.position;
-            toPlayer.y = 0.0f;  // Flatten to XZ
+            glm::vec3 targetPos = playerPos;
+            if (movement->isFlying) {
+                targetPos.y += 1.7f; // Target at player's eye level
+            }
+
+            glm::vec3 toPlayer = targetPos - entity->localTransform.position;
+            if (!movement->isFlying) {
+                toPlayer.y = 0.0f;  // Flatten to XZ for ground NPCs
+            }
             float distToPlayer = glm::length(toPlayer);
-            if (distToPlayer > 2.0f)
-            {
-                glm::vec3 moveDir = glm::normalize(toPlayer);
-                glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
-                newPos.y = entity->localTransform.position.y;  // Preserve Y
-                if (isValidHorizontalMove(entity, newPos))
-                {
-                    entity->localTransform.position = newPos;
-                    movement->blockedAttempts = 0;
+
+            if (!movement->isFlying) {
+                // Ground NPC follow logic (unchanged)
+                if (distToPlayer > 2.0f) {
+                    glm::vec3 moveDir = glm::normalize(toPlayer);
+                    glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                    newPos.y = entity->localTransform.position.y;
+                    if (isValidHorizontalMove(entity, newPos)) {
+                        entity->localTransform.position = newPos;
+                        movement->blockedAttempts = 0;
+                    } else {
+                        movement->blockedAttempts++;
+                        if (movement->isGrounded && movement->blockedAttempts <= 2) {
+                            movement->velocity.y = 8.0f;
+                            movement->isGrounded = false;
+                        }
+                    }
                 }
-                else
-                {
-                    movement->blockedAttempts++;
-                    if (movement->isGrounded && movement->blockedAttempts <= 2)
-                    {
-                        movement->velocity.y = 8.0f; // Jump force
-                        movement->isGrounded = false;
+            } else {
+                // Flying NPC: always in motion
+                float bob = std::sin(movement->bobTimer * movement->bobFrequency) * movement->bobAmplitude * deltaTime;
+
+                if (distToPlayer > 3.0f) {
+                    // Far from player: fly toward them
+                    glm::vec3 moveDir = glm::normalize(toPlayer);
+                    glm::vec3 newPos = entity->localTransform.position + moveDir * movement->speed * deltaTime;
+                    newPos.y += bob;
+                    if (isValidNPCPosition(entity, newPos)) {
+                        entity->localTransform.position = newPos;
+                    }
+                } else {
+                    // Near player: orbit around them while bobbing
+                    float orbitSpeed = 1.5f;
+                    float orbitRadius = 2.5f;
+                    float orbitAngle = movement->bobTimer * orbitSpeed;
+                    glm::vec3 orbitTarget;
+                    orbitTarget.x = playerPos.x + std::cos(orbitAngle) * orbitRadius;
+                    orbitTarget.y = playerPos.y + 1.7f + std::sin(movement->bobTimer * movement->bobFrequency) * 0.3f;
+                    orbitTarget.z = playerPos.z + std::sin(orbitAngle) * orbitRadius;
+
+                    glm::vec3 toOrbit = orbitTarget - entity->localTransform.position;
+                    float orbitDist = glm::length(toOrbit);
+                    if (orbitDist > 0.1f) {
+                        glm::vec3 moveDir = glm::normalize(toOrbit);
+                        float followSpeed = std::min(movement->speed, orbitDist / deltaTime); // Smooth approach
+                        glm::vec3 newPos = entity->localTransform.position + moveDir * followSpeed * deltaTime;
+                        if (isValidNPCPosition(entity, newPos)) {
+                            entity->localTransform.position = newPos;
+                        }
                     }
                 }
             }
