@@ -172,6 +172,42 @@ namespace voxel
                 }
             }
         }
+
+        // Diamond Generation Pass (embedded in stone deep underground)
+        {
+            std::mt19937 diamondRng(chunkX * 12743 + chunkZ * 48271); 
+            std::uniform_int_distribution<int> chanceDist(0, 10000);
+
+            for (int z = 0; z < CHUNK_SIZE; ++z)
+            {
+                for (int x = 0; x < CHUNK_SIZE; ++x)
+                {
+                    int worldX = chunkX * CHUNK_SIZE + x;
+                    int worldZ = chunkZ * CHUNK_SIZE + z;
+                    
+                    // Calculate if this position is in a cave region
+                    float hills = std::sin(worldX * 0.2f) + std::cos(worldZ * 0.2f);
+                    int grassSurface = waterLevel + 1 + static_cast<int>(hills * 2.0f);
+
+                    for (int y = 0; y < height; ++y)
+                    {
+                        // Only place diamonds deep underground, well below grass surface
+                        if (y > 4 && y < grassSurface - 8)
+                        {
+                            // Check if this block is stone
+                            if (getBlock(x, y, z) == STONE)
+                            {
+                                // Randomly replace stone with diamond
+                                if (chanceDist(diamondRng) < 500)
+                                {
+                                    setBlock(x, y, z, Diamond);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // 2. ADD VERTICAL LIGHT PROPAGATION

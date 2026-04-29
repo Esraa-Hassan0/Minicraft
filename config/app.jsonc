@@ -58,6 +58,7 @@
                 "log": "assets/textures/log.png",
                 "leaf": "assets/textures/leaf.png",
                 "hand": "assets/textures/right_hand.png",
+                "diamond": "assets/textures/diamond_block.png",
                 "enemy-zombie-tex": "assets/textures/zombie.png",
                 "enemy-skeleton-tex": "assets/textures/skeleton.png",
                 "enemy-creeper-tex": "assets/textures/creeper.png"
@@ -413,6 +414,26 @@
                     },
                     "tint": [1.0, 1.0, 1.0, 1.0],
                     "texture": "leaf",
+                    "sampler": "pixelated"
+                },
+                "diamond": {
+                    "type": "textured",
+                    "shader": "textured",
+                    "pipelineState": {
+                        "faceCulling": {
+                            "enabled": true
+                        },
+                        "depthTesting": {
+                            "enabled": true
+                        }
+                    },
+                    "tint": [
+                        1.0,
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "texture": "diamond",
                     "sampler": "pixelated"
                 },
                 "water": {
