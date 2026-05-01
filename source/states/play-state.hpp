@@ -781,7 +781,7 @@ class Playstate : public our::State
         std::random_device rd;
         std::mt19937 gen(rd());
         // Increase NPCs per chunk to make distribution more dense
-        std::uniform_int_distribution<> npcCountDist(1, 3);
+        std::uniform_int_distribution<> npcCountDist(0, 1);
         std::uniform_int_distribution<> templateDist(0, static_cast<int>(npcTemplates.size()) - 1);
 
         int numNPCs = npcCountDist(gen);
