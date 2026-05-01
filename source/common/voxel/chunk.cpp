@@ -7,6 +7,16 @@
 namespace voxel
 {
 
+    static float getFractalNoise(int worldX, int worldZ) {
+        float x = worldX * 0.04f;
+        float z = worldZ * 0.04f;
+        
+        float total = std::sin(x) + std::cos(z); 
+        total += 0.5f * (std::sin(x * 2.3f + 1.2f) + std::cos(z * 2.7f + 0.8f)); 
+        total += 0.25f * (std::sin(x * 4.1f + 2.4f) + std::cos(z * 4.3f + 1.1f)); 
+        
+        return total; 
+    }
     // 1. UPDATE CONSTRUCTOR: Initialize the 'light' vector to 15 (max sunlight)
     Chunk::Chunk(int cx, int cz, int h, ChunkType type)
         : chunkX(cx), chunkZ(cz), height(h), chunkType(type),
@@ -49,11 +59,14 @@ namespace voxel
                          }
                      }
 
-                     // If it's a cave, skip setting the block (leaving it as AIR)
-                     if (isCave) 
-                     {
-                         continue; 
-                     }
+                    if (isCave) 
+                    {
+                        if (y <= waterLevel) 
+                        {
+                            setBlock(x, y, z, WATER);
+                        }
+                        continue; 
+                    }
 
                      // --- Standard Terrain Placement ---
                      if (y < stoneLevel)

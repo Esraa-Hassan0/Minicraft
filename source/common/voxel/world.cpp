@@ -111,6 +111,7 @@ void World::setBlock(int worldX, int y, int worldZ, int type) {
             auto neighborIt = activeChunks.find(neighborKey);
             if (neighborIt != activeChunks.end()) neighborIt->second.isDirty = true;
         }
+        triggerBlockUpdate(worldX, y, worldZ);
     }
 }
 
@@ -189,6 +190,61 @@ int World::getLight(int worldX, int y, int worldZ) const {
     int localZ = (worldZ % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;
 
     return it->second.getLight(localX, y, localZ);
+}
+void World::triggerBlockUpdate(int worldX, int y, int worldZ) {
+    if (getBlock(worldX, y, worldZ) == voxel::WATER) {
+        fluidQueue.push_back({worldX, y, worldZ});
+    }
+
+    static const glm::ivec3 offsets[6] = {
+        {0, 1, 0}, {0, -1, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}
+    };
+
+    for (const auto& offset : offsets) {
+        int nx = worldX + offset.x;
+        int ny = y + offset.y;
+        int nz = worldZ + offset.z;
+        if (getBlock(nx, ny, nz) == voxel::WATER) {
+            fluidQueue.push_back({nx, ny, nz});
+        }
+    }
+}
+
+void World::updateFluids(float deltaTime, bool& meshDirtyFlag) {
+    fluidTickTimer += deltaTime;
+    if (fluidTickTimer < 0.15f) return; 
+    fluidTickTimer = 0.0f;
+
+    if (fluidQueue.empty()) return;
+
+    std::vector<glm::ivec3> currentQueue = fluidQueue;
+    fluidQueue.clear();
+
+    bool fluidMoved = false;
+
+    for (const auto& pos : currentQueue) {
+        int x = pos.x, y = pos.y, z = pos.z;
+
+        if (getBlock(x, y, z) != voxel::WATER) continue;
+
+        if (getBlock(x, y - 1, z) == voxel::AIR) {
+            setBlock(x, y - 1, z, voxel::WATER);
+            fluidMoved = true;
+        }
+        else {
+            static const glm::ivec3 sides[4] = { {1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1} };
+            for (const auto& dir : sides) {
+                if (getBlock(x + dir.x, y, z + dir.z) == voxel::AIR) {
+                    setBlock(x + dir.x, y, z + dir.z, voxel::WATER);
+                    fluidMoved = true;
+                }
+            }
+        }
+    }
+
+    if (fluidMoved) {
+        meshDirtyFlag = true;
+    }
 }
 
 } // namespace voxel
