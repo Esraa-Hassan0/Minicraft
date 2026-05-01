@@ -72,8 +72,8 @@ namespace our
         // ── Tuning ────────────────────────────────────────────────
         float spawnRadius = 28.0f;    // Spawn enemies this far from player
         float spawnMinRadius = 12.0f; // But not closer than this
-        float spawnInterval = 12.0f;  // Seconds between spawn checks
-        int maxEnemies = 7;           // Soft cap on living enemies
+        float spawnInterval = 8.0f;   // Seconds between spawn checks (was 12)
+        int maxEnemies = 10;          // Soft cap on living enemies (was 7)
 
         // ── Internal state ────────────────────────────────────────
         float spawnTimer = 0.0f;
@@ -110,7 +110,7 @@ namespace our
         // ── Main update (call every frame from play-state onDraw) ─
         void update(World *world, voxel::World *terrain,
                     const glm::vec3 &playerPos, float dt,
-                    bool &terrainMeshDirty)
+                    bool &terrainMeshDirty, bool isNight = true)
         {
             Entity *playerEntity = findPlayer(world);
             if (!playerEntity)
@@ -130,7 +130,7 @@ namespace our
             if (spawnTimer >= spawnInterval)
             {
                 spawnTimer = 0.0f;
-                trySpawnWave(world, terrain, playerPos);
+                trySpawnWave(world, terrain, playerPos, isNight);
             }
 
             // Collect entities to remove after iterating
@@ -413,7 +413,7 @@ namespace our
         }
 
         // ── Spawning ──────────────────────────────────────────────
-        void trySpawnWave(World *world, voxel::World *terrain, glm::vec3 playerPos)
+        void trySpawnWave(World *world, voxel::World *terrain, glm::vec3 playerPos, bool isNight)
         {
             waveNumber++;
             int living = countLivingEnemies(world);
@@ -424,13 +424,19 @@ namespace our
             bool forceCreeper = (waveNumber >= 2 && livingCreepers == 0);
 
             // Minecraft-like pacing: many checks fail, and successful checks spawn small groups.
-            if ((std::rand() % 100) < 45)
+            // Enemies appear much more frequently at night.
+            int skipChance = isNight ? 10 : 75; 
+            if ((std::rand() % 100) < skipChance)
                 return;
 
             int toSpawn = 1;
-            if (waveNumber > 3 && (std::rand() % 100) < 35)
+            if (waveNumber > 2 && (std::rand() % 100) < 45)
             {
                 toSpawn = 2;
+            }
+            if (waveNumber > 5 && (std::rand() % 100) < 25)
+            {
+                toSpawn = 3;
             }
             toSpawn = std::min(toSpawn, maxEnemies - living);
 
@@ -446,11 +452,13 @@ namespace our
                     int roll = std::rand() % 100;
                     if (waveNumber < 2)
                     {
-                        type = (roll < 65) ? EnemyType::ZOMBIE : EnemyType::SKELETON;
+                        // No creepers early - 50/50 zombie/skeleton
+                        type = (roll < 50) ? EnemyType::ZOMBIE : EnemyType::SKELETON;
                     }
                     else
                     {
-                        if (roll < 40)
+                        // 35% zombie, 35% skeleton, 30% creeper (was 40/30/30)
+                        if (roll < 35)
                             type = EnemyType::ZOMBIE;
                         else if (roll < 70)
                             type = EnemyType::SKELETON;
@@ -552,14 +560,14 @@ namespace our
             case EnemyType::ZOMBIE:
                 enemy->maxHealth = 20.0f;
                 enemy->health = 20.0f;
-                enemy->speed = 2.8f;
+                enemy->speed = 3.2f;  // was 2.8
                 enemy->attackDamage = 8.0f;
                 enemy->attackRange = 1.6f;
                 break;
             case EnemyType::SKELETON:
                 enemy->maxHealth = 15.0f;
                 enemy->health = 15.0f;
-                enemy->speed = 2.2f;
+                enemy->speed = 2.8f;  // was 2.2
                 enemy->attackDamage = 6.0f;
                 enemy->attackRange = 1.2f;
                 enemy->preferredRange = 10.0f;
@@ -689,8 +697,8 @@ namespace our
 
                         if (wallAhead && clearAbove && clearAboveAbove)
                         {
-                            enemy->velocity.y = std::max(enemy->velocity.y, 5.9f);
-                            enemy->jumpCooldown = 0.82f;
+                            enemy->velocity.y = std::max(enemy->velocity.y, 7.5f); // was 5.9
+                            enemy->jumpCooldown = 0.65f; // was 0.82
                             enemy->stuckTimer = 0.0f;
                         }
                     }
@@ -704,7 +712,7 @@ namespace our
             if (movLen > 0.5f && hDist < 0.001f)
             {
                 enemy->stuckTimer += dt;
-                if (enemy->stuckTimer > 1.15f)
+                if (enemy->stuckTimer > 0.8f) // was 1.15
                 {
                     enemy->velocity.x = 0.0f;
                     enemy->velocity.z = 0.0f;

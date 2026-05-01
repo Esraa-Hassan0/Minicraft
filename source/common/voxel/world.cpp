@@ -53,6 +53,19 @@ void World::generateChunk(int chunkX, int chunkZ) {
         ChunkType type = get_chunk_type_for_coordinates(chunkX, chunkZ);
         activeChunks.emplace(key, Chunk(chunkX, chunkZ, height, type));
         activeChunks.at(key).generate(waterLevel, stoneLevel);
+
+        static const glm::ivec2 neighborOffsets[4] = {
+            {1, 0}, {-1, 0}, {0, 1}, {0, -1}
+        };
+
+        for (const auto& offset : neighborOffsets) {
+            std::string neighborKey =
+                std::to_string(chunkX + offset.x) + "_" + std::to_string(chunkZ + offset.y);
+            auto neighborIt = activeChunks.find(neighborKey);
+            if (neighborIt != activeChunks.end()) {
+                neighborIt->second.isDirty = true;
+            }
+        }
     }
 }
 
@@ -183,7 +196,7 @@ int World::getLight(int worldX, int y, int worldZ) const {
 
     auto it = activeChunks.find(key);
     if (it == activeChunks.end()) {
-        return 0;
+        return 15;
     }
 
     int localX = (worldX % Chunk::CHUNK_SIZE + Chunk::CHUNK_SIZE) % Chunk::CHUNK_SIZE;

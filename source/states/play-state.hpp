@@ -96,8 +96,10 @@ class Playstate : public our::State
     std::vector<NPCSpawnData> npcTemplates;
 
     // --- Inventory & Hotbar Helpers ---
-    static constexpr int kHotbarSlots = 5;
+    static constexpr int kHotbarSlots = 9;
     bool isInventoryOpen = false;
+    bool beesAngry = false; // Set true when any bee is hit
+    float waterAnimTimer = 0.0f; // Timer for periodic water mesh rebuild
 
     // Level up notification
     float levelUpNotificationTime = 0.0f;
@@ -107,36 +109,19 @@ class Playstate : public our::State
     float levelTargetPopupTime = 0.0f;
     int currentLevelTarget = 0;
 
-    static int hotbarBlockType(int slot)
+    // Get the block type to place from the selected hotbar slot
+    static int hotbarBlockType(our::PlayerComponent *player)
     {
-        static const int types[kHotbarSlots] = {
-            voxel::GRASS, voxel::DIRT, voxel::WOOD, voxel::STONE, voxel::SAND};
-        return types[std::clamp(slot, 0, kHotbarSlots - 1)];
-    }
-
-    static int *inventoryCountForType(our::PlayerComponent *player, int blockType)
-    {
-        switch (blockType)
-        {
-        case voxel::GRASS:
-            return &player->inventoryGrass;
-        case voxel::DIRT:
-            return &player->inventoryDirt;
-        case voxel::WOOD:
-            return &player->inventoryWood;
-        case voxel::STONE:
-            return &player->inventoryStone;
-        case voxel::SAND:
-            return &player->inventorySand;
-        default:
-            return nullptr;
-        }
+        if (!player) return 0;
+        int itemId = player->getSelectedItemId();
+        return voxel::isBlockItem(itemId) ? itemId : 0;
     }
 
     void registerCollectedBlock(our::PlayerComponent *player, int blockType)
     {
+        if (!player) return;
         // Collecting a Diamond block immediately triggers a WIN condition
-        if (player && blockType == voxel::Diamond)
+        if (blockType == voxel::Diamond)
         {
             player->gameState = our::GameState::WIN;
             our::AudioSystem::playSound("assets/sounds/vectory.mp3");
@@ -144,7 +129,7 @@ class Playstate : public our::State
         }
 
         // Level 3: Collecting any other block after reaching level 3
-        if (player && player->level == 3)
+        if (player->level == 3)
         {
             player->currentXP = 1.0f;
             player->level = 4;
@@ -153,11 +138,173 @@ class Playstate : public our::State
             our::AudioSystem::playSound("assets/sounds/levelup.wav");
         }
 
-        int *slot = inventoryCountForType(player, blockType);
-        if (slot)
-        {
-            (*slot)++;
-            player->resourcesCollected++;
+        player->addItem(blockType, 1);
+        player->resourcesCollected++;
+    }
+
+    // --- Crafting Recipes ---
+    struct CraftingRecipe {
+        int grid[4]; // [0]=top-left, [1]=top-right, [2]=bottom-left, [3]=bottom-right; 0=empty
+        int resultId;
+        int resultCount;
+    };
+
+    static const std::vector<CraftingRecipe>& getCraftingRecipes() {
+        static const std::vector<CraftingRecipe> recipes = {
+            // 1 Log -> 4 Wood (all positions)
+            {{voxel::LOG, 0, 0, 0}, voxel::WOOD, 4},
+            {{0, voxel::LOG, 0, 0}, voxel::WOOD, 4},
+            {{0, 0, voxel::LOG, 0}, voxel::WOOD, 4},
+            {{0, 0, 0, voxel::LOG}, voxel::WOOD, 4},
+            
+            // 1 Sand -> 1 Glass (all positions)
+            {{voxel::SAND, 0, 0, 0}, voxel::Glass, 1},
+            {{0, voxel::SAND, 0, 0}, voxel::Glass, 1},
+            {{0, 0, voxel::SAND, 0}, voxel::Glass, 1},
+            {{0, 0, 0, voxel::SAND}, voxel::Glass, 1},
+            
+            // 2 Wood vertical -> Wooden Axe
+            {{voxel::WOOD, 0, voxel::WOOD, 0}, voxel::TOOL_WOODEN_AXE, 1},
+            {{0, voxel::WOOD, 0, voxel::WOOD}, voxel::TOOL_WOODEN_AXE, 1},
+            
+            // 2 Wood horizontal -> Wooden Pickaxe
+            {{voxel::WOOD, voxel::WOOD, 0, 0}, voxel::TOOL_WOODEN_PICKAXE, 1},
+            {{0, 0, voxel::WOOD, voxel::WOOD}, voxel::TOOL_WOODEN_PICKAXE, 1},
+            
+            // 2 Stone vertical -> Stone Axe
+            {{voxel::STONE, 0, voxel::STONE, 0}, voxel::TOOL_STONE_AXE, 1},
+            {{0, voxel::STONE, 0, voxel::STONE}, voxel::TOOL_STONE_AXE, 1},
+            
+            // 2 Stone horizontal -> Stone Pickaxe
+            {{voxel::STONE, voxel::STONE, 0, 0}, voxel::TOOL_STONE_PICKAXE, 1},
+            {{0, 0, voxel::STONE, voxel::STONE}, voxel::TOOL_STONE_PICKAXE, 1},
+        };
+        return recipes;
+    }
+
+    void checkCraftingRecipe(our::PlayerComponent *player) {
+        if (!player) return;
+        player->craftingResult.clear();
+        for (const auto& recipe : getCraftingRecipes()) {
+            bool match = true;
+            for (int i = 0; i < 4; i++) {
+                int gridItem = player->craftingGrid[i].isEmpty() ? 0 : player->craftingGrid[i].itemId;
+                if (gridItem != recipe.grid[i]) { match = false; break; }
+            }
+            if (match) {
+                player->craftingResult = {recipe.resultId, recipe.resultCount};
+                return;
+            }
+        }
+    }
+
+    void performCraft(our::PlayerComponent *player) {
+        if (!player || player->craftingResult.isEmpty()) return;
+        // Consume ingredients
+        for (int i = 0; i < 4; i++) {
+            if (!player->craftingGrid[i].isEmpty()) {
+                player->craftingGrid[i].count--;
+                if (player->craftingGrid[i].count <= 0) player->craftingGrid[i].clear();
+            }
+        }
+        // Give result to cursor or add to inventory
+        if (player->cursorItem.isEmpty()) {
+            player->cursorItem = player->craftingResult;
+        } else if (player->cursorItem.itemId == player->craftingResult.itemId) {
+            player->cursorItem.count += player->craftingResult.count;
+        } else {
+            player->addItem(player->craftingResult.itemId, player->craftingResult.count);
+        }
+        player->craftingResult.clear();
+        checkCraftingRecipe(player); // Re-check after consuming
+    }
+
+    // Click handler for inventory slot interaction
+    void handleSlotClick(our::InventorySlot &slot, our::PlayerComponent *player, bool singleAction = false) {
+        if (!player) return;
+        if (player->cursorItem.isEmpty() && slot.isEmpty()) return;
+        
+        if (player->cursorItem.isEmpty()) {
+            if (singleAction) {
+                // Pick up half
+                int half = slot.count / 2;
+                int remain = slot.count - half;
+                if (half > 0) {
+                    player->cursorItem = {slot.itemId, half};
+                    slot.count = remain;
+                } else {
+                    player->cursorItem = slot;
+                    slot.clear();
+                }
+            } else {
+                // Pick up all
+                player->cursorItem = slot;
+                slot.clear();
+            }
+        } else if (slot.isEmpty()) {
+            if (singleAction) {
+                // Place 1
+                slot = {player->cursorItem.itemId, 1};
+                player->cursorItem.count--;
+                if (player->cursorItem.count <= 0) player->cursorItem.clear();
+            } else {
+                // Place all
+                slot = player->cursorItem;
+                player->cursorItem.clear();
+            }
+        } else if (slot.itemId == player->cursorItem.itemId) {
+            if (singleAction) {
+                // Place 1
+                slot.count++;
+                player->cursorItem.count--;
+                if (player->cursorItem.count <= 0) player->cursorItem.clear();
+            } else {
+                // Stack all
+                slot.count += player->cursorItem.count;
+                player->cursorItem.clear();
+            }
+        } else {
+            // Swap
+            std::swap(slot, player->cursorItem);
+        }
+    }
+
+    // Get texture name for an item ID (for drawing icons)
+    static const char* getItemTextureName(int itemId) {
+        switch(itemId) {
+            case voxel::GRASS: return "grass-side";
+            case voxel::DIRT: return "dirt";
+            case voxel::WOOD: return "wood";
+            case voxel::STONE: return "stone";
+            case voxel::SAND: return "sand";
+            case voxel::LOG: return "log";
+            case voxel::LEAF: return "leaf";
+            case voxel::Diamond: return "diamond";
+            case voxel::Glass: return "glass";
+            case voxel::TOOL_WOODEN_AXE: return "wooden_axe";
+            case voxel::TOOL_STONE_AXE: return "stone_axe";
+            case voxel::TOOL_WOODEN_PICKAXE: return "wooden_pickaxe";
+            case voxel::TOOL_STONE_PICKAXE: return "stone_pickaxe";
+            default: return nullptr;
+        }
+    }
+
+    static ImU32 getItemFallbackColor(int itemId) {
+        switch(itemId) {
+            case voxel::GRASS: return IM_COL32(72, 130, 58, 255);
+            case voxel::DIRT: return IM_COL32(115, 77, 51, 255);
+            case voxel::WOOD: return IM_COL32(130, 85, 48, 255);
+            case voxel::STONE: return IM_COL32(118, 118, 118, 255);
+            case voxel::SAND: return IM_COL32(204, 190, 72, 255);
+            case voxel::LOG: return IM_COL32(90, 60, 30, 255);
+            case voxel::LEAF: return IM_COL32(50, 140, 50, 255);
+            case voxel::Diamond: return IM_COL32(100, 220, 255, 255);
+            case voxel::Glass: return IM_COL32(200, 220, 255, 200);
+            case voxel::TOOL_WOODEN_AXE: return IM_COL32(160, 110, 50, 255);
+            case voxel::TOOL_STONE_AXE: return IM_COL32(140, 140, 140, 255);
+            case voxel::TOOL_WOODEN_PICKAXE: return IM_COL32(170, 120, 60, 255);
+            case voxel::TOOL_STONE_PICKAXE: return IM_COL32(150, 150, 155, 255);
+            default: return IM_COL32(60, 60, 65, 255);
         }
     }
 
@@ -203,6 +350,8 @@ class Playstate : public our::State
             return our::AssetLoader<our::Material>::get("leaf");
         case voxel::Diamond:
             return our::AssetLoader<our::Material>::get("diamond");
+        case voxel::Glass:
+            return our::AssetLoader<our::Material>::get("glass");
         default:
             return our::AssetLoader<our::Material>::get("default");
         }
@@ -374,42 +523,31 @@ class Playstate : public our::State
     }
 
     // --- UI Drawing (Combined) ---
-    static void drawHotbarResourceIcon(ImDrawList *dl, int hotbarSlot, const ImVec2 &iconMin, const ImVec2 &iconMax)
+    // Draw an item icon for any item ID (block texture or tool color)
+    static void drawItemIcon(ImDrawList *dl, int itemId, const ImVec2 &iconMin, const ImVec2 &iconMax)
     {
+        if (itemId == 0) return;
         const ImU32 outline = IM_COL32(18, 18, 22, 220);
         our::Texture2D *tex = nullptr;
-        ImU32 fallbackColor = IM_COL32(60, 60, 65, 255);
-
-        if (hotbarSlot == 0)
-        {
-            tex = our::AssetLoader<our::Texture2D>::get("grass-side");
-            fallbackColor = IM_COL32(72, 130, 58, 255);
-        }
-        else if (hotbarSlot == 1)
-        {
-            tex = our::AssetLoader<our::Texture2D>::get("dirt");
-            fallbackColor = IM_COL32(115, 77, 51, 255);
-        }
-        else if (hotbarSlot == 2)
-        {
-            tex = our::AssetLoader<our::Texture2D>::get("wood");
-            fallbackColor = IM_COL32(130, 85, 48, 255);
-        }
-        else if (hotbarSlot == 3)
-        {
-            tex = our::AssetLoader<our::Texture2D>::get("stone");
-            fallbackColor = IM_COL32(118, 118, 118, 255);
-        }
-        else if (hotbarSlot == 4)
-        {
-            tex = our::AssetLoader<our::Texture2D>::get("sand");
-            fallbackColor = IM_COL32(204, 190, 72, 255);
-        }
+        const char *texName = getItemTextureName(itemId);
+        if (texName) tex = our::AssetLoader<our::Texture2D>::get(texName);
 
         if (tex)
-            dl->AddImage((ImTextureID)(intptr_t)tex->getOpenGLName(), iconMin, iconMax, ImVec2(0, 1), ImVec2(1, 0)); // to fix the inverted texture
-        else
-            dl->AddRectFilled(iconMin, iconMax, fallbackColor, 4.0f);
+            dl->AddImage((ImTextureID)(intptr_t)tex->getOpenGLName(), iconMin, iconMax, ImVec2(0, 1), ImVec2(1, 0));
+        else {
+            ImU32 fc = getItemFallbackColor(itemId);
+            dl->AddRectFilled(iconMin, iconMax, fc, 4.0f);
+            // For tools, draw a small label
+            if (voxel::isToolItem(itemId)) {
+                const char* name = voxel::getItemName(itemId);
+                if (name && name[0]) {
+                    ImVec2 ts = ImGui::CalcTextSize(name);
+                    float cx = iconMin.x + (iconMax.x - iconMin.x - ts.x) * 0.5f;
+                    float cy = iconMin.y + (iconMax.y - iconMin.y - ts.y) * 0.5f;
+                    dl->AddText(ImVec2(cx, cy), IM_COL32_WHITE, name);
+                }
+            }
+        }
         dl->AddRect(iconMin, iconMax, outline, 4.0f, ImDrawCornerFlags_All, 1.25f);
     }
 
@@ -436,6 +574,12 @@ class Playstate : public our::State
         auto *killable = npcEntity->getComponent<our::KillableNPCComponent>();
         if (killable)
         {
+            // If a bee is hit, make ALL bees angry
+            if (killable->npcType == "bee")
+            {
+                beesAngry = true;
+            }
+
             if (killable->npcType == "chest")
             {
                 // Increase health for chests, capped at max health
@@ -493,7 +637,7 @@ class Playstate : public our::State
             if (!killable)
                 continue;
 
-            if (killable->npcType == "cat" || killable->npcType == "frog" || killable->npcType == "bee")
+            if (killable->npcType == "cat" || killable->npcType == "frog")
                 continue;
 
             glm::vec3 npcPos = entity->localTransform.position;
@@ -637,7 +781,7 @@ class Playstate : public our::State
         std::random_device rd;
         std::mt19937 gen(rd());
         // Increase NPCs per chunk to make distribution more dense
-        std::uniform_int_distribution<> npcCountDist(1, 3);
+        std::uniform_int_distribution<> npcCountDist(0, 1);
         std::uniform_int_distribution<> templateDist(0, static_cast<int>(npcTemplates.size()) - 1);
 
         int numNPCs = npcCountDist(gen);
@@ -998,33 +1142,54 @@ class Playstate : public our::State
             return;
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+        our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
         // Draw inventory
-        if (isInventoryOpen)
+        if (isInventoryOpen && player)
         {
-            ImVec2 windowSize(400, 360);
+            ImVec2 windowSize(420, 380);
             ImGui::SetNextWindowPos(ImVec2((displaySize.x - windowSize.x) * 0.5f, (displaySize.y - windowSize.y) * 0.5f), ImGuiCond_Always);
             ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
 
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.76f, 0.76f, 0.76f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
 
             ImGui::Begin("Inventory", &isInventoryOpen, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+            ImDrawList *invDl = ImGui::GetWindowDrawList();
+            constexpr float slotSz = 36.0f, iconPad = 4.0f;
 
             // ==========================================
             // 1. Crafting Section (2x2 + Output)
             // ==========================================
-            ImGui::SetCursorPos(ImVec2(180, 20));
+            ImGui::SetCursorPos(ImVec2(130, 20));
             ImGui::BeginGroup();
             ImGui::Text("Crafting");
             for (int r = 0; r < 2; r++)
             {
                 for (int c = 0; c < 2; c++)
                 {
-                    ImGui::Button(("##craft" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
-                    if (c < 1)
-                        ImGui::SameLine();
+                    int idx = r * 2 + c;
+                    auto &gridSlot = player->craftingGrid[idx];
+                    std::string btnId = "##craft" + std::to_string(idx);
+                    ImVec2 sp = ImGui::GetCursorScreenPos();
+                    bool lClick = ImGui::Button(btnId.c_str(), ImVec2(slotSz, slotSz));
+                    bool rClick = ImGui::IsItemClicked(1);
+                    bool shiftClick = lClick && ImGui::GetIO().KeyShift;
+                    if (lClick || rClick) {
+                        bool singleAction = rClick || shiftClick;
+                        handleSlotClick(gridSlot, player, singleAction);
+                        checkCraftingRecipe(player);
+                    }
+                    if (!gridSlot.isEmpty()) {
+                        drawItemIcon(invDl, gridSlot.itemId, ImVec2(sp.x+iconPad, sp.y+iconPad), ImVec2(sp.x+slotSz-iconPad, sp.y+slotSz-iconPad));
+                        char cnt[12]; std::snprintf(cnt, sizeof(cnt), "%d", gridSlot.count);
+                        ImVec2 ts = ImGui::CalcTextSize(cnt);
+                        invDl->AddText(ImVec2(sp.x+slotSz-ts.x-2, sp.y+slotSz-ts.y), IM_COL32(50,50,50,255), cnt);
+                    }
+                    if (c < 1) ImGui::SameLine();
                 }
             }
             ImGui::EndGroup();
@@ -1034,7 +1199,18 @@ class Playstate : public our::State
             ImGui::Text("->");
             ImGui::SameLine(0, 15);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 10);
-            ImGui::Button("##craft_out", ImVec2(45, 45));
+            {
+                ImVec2 sp = ImGui::GetCursorScreenPos();
+                if (ImGui::Button("##craft_out", ImVec2(45, 45))) {
+                    performCraft(player);
+                }
+                if (!player->craftingResult.isEmpty()) {
+                    drawItemIcon(invDl, player->craftingResult.itemId, ImVec2(sp.x+4, sp.y+4), ImVec2(sp.x+41, sp.y+41));
+                    char cnt[12]; std::snprintf(cnt, sizeof(cnt), "%d", player->craftingResult.count);
+                    ImVec2 ts = ImGui::CalcTextSize(cnt);
+                    invDl->AddText(ImVec2(sp.x+43-ts.x, sp.y+43-ts.y), IM_COL32(50,50,50,255), cnt);
+                }
+            }
 
             ImGui::Spacing();
             ImGui::Spacing();
@@ -1052,41 +1228,81 @@ class Playstate : public our::State
             {
                 for (int c = 0; c < 9; c++)
                 {
-                    ImGui::Button(("##inv" + std::to_string(r) + "_" + std::to_string(c)).c_str(), ImVec2(36, 36));
-                    if (c < 8)
-                        ImGui::SameLine();
+                    int idx = r * 9 + c;
+                    auto &invSlot = player->mainInventory[idx];
+                    std::string btnId = "##inv" + std::to_string(idx);
+                    ImVec2 sp = ImGui::GetCursorScreenPos();
+                    bool lClick = ImGui::Button(btnId.c_str(), ImVec2(slotSz, slotSz));
+                    bool rClick = ImGui::IsItemClicked(1);
+                    bool shiftClick = lClick && ImGui::GetIO().KeyShift;
+                    if (lClick || rClick) {
+                        bool singleAction = rClick || shiftClick;
+                        handleSlotClick(invSlot, player, singleAction);
+                    }
+                    if (!invSlot.isEmpty()) {
+                        drawItemIcon(invDl, invSlot.itemId, ImVec2(sp.x+iconPad, sp.y+iconPad), ImVec2(sp.x+slotSz-iconPad, sp.y+slotSz-iconPad));
+                        char cnt[12]; std::snprintf(cnt, sizeof(cnt), "%d", invSlot.count);
+                        ImVec2 ts = ImGui::CalcTextSize(cnt);
+                        invDl->AddText(ImVec2(sp.x+slotSz-ts.x-2, sp.y+slotSz-ts.y), IM_COL32(50,50,50,255), cnt);
+                    }
+                    if (c < 8) ImGui::SameLine();
                 }
-                if (r < 2)
-                    ImGui::SetCursorPosX(16);
+                if (r < 2) ImGui::SetCursorPosX(16);
             }
 
             ImGui::Spacing();
             ImGui::Spacing();
 
             // ==========================================
-            // 3. Hotbar Section (1x9)
+            // 3. Hotbar Section (1x9) in inventory view
             // ==========================================
             ImGui::SetCursorPosX(16);
             for (int c = 0; c < 9; c++)
             {
-                ImGui::Button(("##hotbar_inv" + std::to_string(c)).c_str(), ImVec2(36, 36));
-                if (c < 8)
-                    ImGui::SameLine();
+                auto &hSlot = player->hotbar[c];
+                std::string btnId = "##hotbar_inv" + std::to_string(c);
+                bool isSel = (player->inventoryHotbarSlot == c);
+                if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+                ImVec2 sp = ImGui::GetCursorScreenPos();
+                bool lClick = ImGui::Button(btnId.c_str(), ImVec2(slotSz, slotSz));
+                bool rClick = ImGui::IsItemClicked(1);
+                bool shiftClick = lClick && ImGui::GetIO().KeyShift;
+                if (lClick || rClick) {
+                    bool singleAction = rClick || shiftClick;
+                    handleSlotClick(hSlot, player, singleAction);
+                }
+                if (isSel) ImGui::PopStyleColor();
+                if (!hSlot.isEmpty()) {
+                    drawItemIcon(invDl, hSlot.itemId, ImVec2(sp.x+iconPad, sp.y+iconPad), ImVec2(sp.x+slotSz-iconPad, sp.y+slotSz-iconPad));
+                    char cnt[12]; std::snprintf(cnt, sizeof(cnt), "%d", hSlot.count);
+                    ImVec2 ts = ImGui::CalcTextSize(cnt);
+                    invDl->AddText(ImVec2(sp.x+slotSz-ts.x-2, sp.y+slotSz-ts.y), IM_COL32(50,50,50,255), cnt);
+                }
+                if (c < 8) ImGui::SameLine();
+            }
+
+            // Draw cursor item following mouse
+            if (!player->cursorItem.isEmpty()) {
+                ImVec2 mpos = ImGui::GetMousePos();
+                drawItemIcon(invDl, player->cursorItem.itemId, ImVec2(mpos.x-16, mpos.y-16), ImVec2(mpos.x+16, mpos.y+16));
+                char cnt[12]; std::snprintf(cnt, sizeof(cnt), "%d", player->cursorItem.count);
+                invDl->AddText(ImVec2(mpos.x+8, mpos.y+8), IM_COL32_WHITE, cnt);
             }
 
             ImGui::End();
 
             ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
+            ImGui::PopStyleColor(4);
         }
         else
         {
             ImDrawList *drawList = ImGui::GetForegroundDrawList();
-            ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+            (void)drawList;
         }
 
-        // 1. Draw Hotbar
-        our::PlayerComponent *player = playerEntity->getComponent<our::PlayerComponent>();
+
+        // 1. Draw Hotbar (always visible at bottom)
+        if (!player) player = playerEntity->getComponent<our::PlayerComponent>();
         if (player && player->isUnderwater) {
             ImDrawList *bgList = ImGui::GetBackgroundDrawList();
             
@@ -1102,7 +1318,6 @@ class Playstate : public our::State
             if (ImGui::Begin("InventoryHotbar", nullptr, invFlags))
             {
                 ImGui::SetCursorPos(ImVec2(12.0f, 12.0f));
-                int counts[] = {player->inventoryGrass, player->inventoryDirt, player->inventoryWood, player->inventoryStone, player->inventorySand};
                 ImDrawList *dl = ImGui::GetWindowDrawList();
                 for (int i = 0; i < kHotbarSlots; i++)
                 {
@@ -1113,14 +1328,21 @@ class Playstate : public our::State
                     ImVec2 p = ImGui::GetCursorScreenPos();
                     ImVec2 br(p.x + box, p.y + box);
                     dl->AddRectFilled(p, br, selected ? IM_COL32(55, 85, 130, 230) : IM_COL32(28, 28, 32, 220), 6.0f);
-                    drawHotbarResourceIcon(dl, i, ImVec2(p.x + (box - iconSize) * 0.5f, p.y + 5.0f), ImVec2(p.x + (box + iconSize) * 0.5f, p.y + 5.0f + iconSize));
+                    // Draw item icon from the hotbar slot
+                    if (!player->hotbar[i].isEmpty()) {
+                        drawItemIcon(dl, player->hotbar[i].itemId, ImVec2(p.x + (box - iconSize) * 0.5f, p.y + 5.0f), ImVec2(p.x + (box + iconSize) * 0.5f, p.y + 5.0f + iconSize));
+                    }
                     dl->AddRect(p, br, selected ? IM_COL32(240, 200, 90, 255) : IM_COL32(90, 90, 98, 255), 6.0f, ImDrawCornerFlags_All, selected ? 2.5f : 1.0f);
                     if (ImGui::InvisibleButton("slot", ImVec2(box, box)))
                         player->inventoryHotbarSlot = i;
-                    char cnt[12];
-                    std::snprintf(cnt, sizeof(cnt), "x%d", counts[i]);
-                    ImVec2 ts = ImGui::CalcTextSize(cnt);
-                    dl->AddText(ImVec2(p.x + (box - ts.x) * 0.5f, p.y + box - ts.y - 4.0f), IM_COL32_WHITE, cnt);
+                    // Show count
+                    int cnt_val = player->hotbar[i].count;
+                    if (cnt_val > 0) {
+                        char cnt[12];
+                        std::snprintf(cnt, sizeof(cnt), "x%d", cnt_val);
+                        ImVec2 ts = ImGui::CalcTextSize(cnt);
+                        dl->AddText(ImVec2(p.x + (box - ts.x) * 0.5f, p.y + box - ts.y - 4.0f), IM_COL32_WHITE, cnt);
+                    }
                     ImGui::PopID();
                 }
             }
@@ -1208,6 +1430,40 @@ class Playstate : public our::State
                     // Draw full meat on top
                     barDl->AddImage(meatTexID, pMin, pMax, mUvFull0, mUvFull1);
                 }
+            }
+        }
+
+        // Draw Oxygen Bubbles
+        if (player && player->oxygen < player->maxOxygen)
+        {
+            ImDrawList *barDl = ImGui::GetForegroundDrawList();
+            float heartSize = 28.0f;
+            float heartGap = 2.0f;
+            float maxHearts = 10;
+            float heartTotalW = maxHearts * heartSize + (maxHearts - 1) * heartGap;
+            float meatSize = 28.0f;
+            float meatGap = 2.0f;
+            float maxMeat = player->meatMax;
+            float meatTotalW = maxMeat * meatSize + (maxMeat - 1) * meatGap;
+            float barSpacing = 12.0f;
+            float bothTotalW = heartTotalW + meatTotalW + barSpacing;
+            float startX = displaySize.x * 0.5f - bothTotalW * 0.5f;
+            float startY = displaySize.y - 60.0f - 26.0f - 16.0f - heartSize - 8.0f;
+
+            float bubbleSize = 16.0f;
+            float bubbleGap = 4.0f;
+            int maxBubbles = 4;
+            float bubbleStartY = startY - bubbleSize - 8.0f;
+
+            int currentBubbles = static_cast<int>(std::ceil((player->oxygen / player->maxOxygen) * maxBubbles));
+            
+            for (int i = 0; i < currentBubbles; ++i)
+            {
+                ImVec2 center(startX + i * (bubbleSize + bubbleGap) + bubbleSize * 0.5f, bubbleStartY + bubbleSize * 0.5f);
+                barDl->AddCircleFilled(center, bubbleSize * 0.5f, IM_COL32(50, 150, 255, 200));
+                barDl->AddCircle(center, bubbleSize * 0.5f, IM_COL32(20, 100, 200, 255), 12, 2.0f);
+                // highlight
+                barDl->AddCircleFilled(ImVec2(center.x - bubbleSize * 0.15f, center.y - bubbleSize * 0.15f), bubbleSize * 0.15f, IM_COL32(255, 255, 255, 150));
             }
         }
 
@@ -1334,7 +1590,12 @@ class Playstate : public our::State
         bool isPlaying = (!player || player->gameState == our::GameState::PLAYING);
 
         movementSystem.update(&engineWorld, (float)deltaTime);
-        playerController.update(&engineWorld, (float)deltaTime);
+        if (!isInventoryOpen) {
+            playerController.update(&engineWorld, (float)deltaTime);
+        } else if (player) {
+            player->velocity.x = 0.0f;
+            player->velocity.z = 0.0f;
+        }
         
         if (!isPlaying && player) {
             player->velocity.x = 0.0f;
@@ -1353,8 +1614,10 @@ class Playstate : public our::State
         if (isPlaying) {
             timeSystem.update(&engineWorld, (float)deltaTime);
             terrainWorld.updateFluids((float)deltaTime, terrainMeshDirty);
-            if (playerEntity)
-                enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty);
+            if (playerEntity) {
+                bool isNight = timeSystem.getSunElevation() < 0.0f;
+                enemySystem.update(&engineWorld, &terrainWorld, playerEntity->localTransform.position, (float)deltaTime, terrainMeshDirty, isNight);
+            }
 
 
             if (player && player->level > currentLevelTarget) {
@@ -1399,26 +1662,31 @@ class Playstate : public our::State
 
                 if (player->isUnderwater)
                 {
-                    player->waterDamageTimer += (float)deltaTime;
-                    while (player->waterDamageTimer >= player->waterDamageInterval)
-                    {
-                        player->health -= player->waterDamageAmount;
-                        our::AudioSystem::playSound("assets/sounds/life_loss.mp3");
-                        player->shakeTimer = 0.5f;
-                        player->shakeIntensity = 0.2f;
-                        player->waterDamageTimer -= player->waterDamageInterval;
-
-                        if (player->health <= 0.0f)
+                    if (player->oxygen > 0.0f) {
+                        player->oxygen -= (float)deltaTime;
+                    } else {
+                        player->waterDamageTimer += (float)deltaTime;
+                        while (player->waterDamageTimer >= player->waterDamageInterval)
                         {
-                            player->health = 0.0f;
-                            player->isAlive = false;
-                            player->gameState = our::GameState::LOSE;
-                            break;
+                            player->health -= player->waterDamageAmount;
+                            our::AudioSystem::playSound("assets/sounds/life_loss.mp3");
+                            player->shakeTimer = 0.5f;
+                            player->shakeIntensity = 0.2f;
+                            player->waterDamageTimer -= player->waterDamageInterval;
+
+                            if (player->health <= 0.0f)
+                            {
+                                player->health = 0.0f;
+                                player->isAlive = false;
+                                player->gameState = our::GameState::LOSE;
+                                break;
+                            }
                         }
                     }
                 }
-                else if (player->waterDamageTimer > 0.0f)
+                else
                 {
+                    player->oxygen = player->maxOxygen;
                     player->waterDamageTimer = 0.0f;
                 }
 
@@ -1497,10 +1765,12 @@ class Playstate : public our::State
                 if (isInventoryOpen)
                 {
                     cameraController.exit();
+                    playerController.exit();
                 }
                 else
                 {
                     cameraController.enter(getApp());
+                    playerController.enter(getApp());
                 }
             }
 
@@ -1519,13 +1789,11 @@ class Playstate : public our::State
 
             // Get interaction range from hand component or player component
             float interactRange = 10.0f;  // Default fallback
-            our::Entity *handEntity = nullptr;
             for (auto entity : engineWorld.getEntities()) {
                 if (!entity) continue;
                 auto *handComp = entity->getComponent<our::HandComponent>();
                 if (handComp) {
                     interactRange = handComp->interactionRange;
-                    handEntity = entity;
                     break;
                 }
             }
@@ -1573,13 +1841,10 @@ class Playstate : public our::State
                         our::AudioSystem::playSound("assets/sounds/Death.wav");
                     }
                 }
-                if (mouse.isPressed(0))
+                if (mouse.isPressed(0) && player && !player->isUnderwater && hoverHit.hit)
                 {
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, interactRange);
-                    if (hit.hit)
-                {
-                    int type = terrainWorld.getBlock(hit.x, hit.y, hit.z);
-                    auto holdResult = blockInteraction.processHold(hit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime);
+                    int type = terrainWorld.getBlock(hoverHit.x, hoverHit.y, hoverHit.z);
+                    auto holdResult = blockInteraction.processHold(hoverHit, type, terrainWorld, &engineWorld, terrainMeshDirty, (float)deltaTime);
                     if (holdResult == BlockInteractionSystem::HoldResult::Broken)
                     {
                         // The block was completely broken
@@ -1607,21 +1872,24 @@ class Playstate : public our::State
                             our::AudioSystem::playSound("assets/sounds/Hit.wav");
                     }
                 }
-                else if (mouse.justReleased(0))
+                else if (mouse.justReleased(0) || !mouse.isPressed(0) || !hoverHit.hit || !player || player->isUnderwater)
                 {
                     blockInteraction.currentTargetContext = {-1, -1, -1};
                     blockInteraction.accumulatedBreakTime = 0.0f;
+                    blockInteraction.particleSpawnTimer = 0.0f;
                 }
 
-                if (mouse.justPressed(1) && player && !player->isUnderwater)
+                if (mouse.justPressed(1) && player && !player->isUnderwater && !isInventoryOpen)
                 {
-                    voxel::RayHit hit = terrainWorld.castRay(camPos, camDir, 2.0f);
-                    int placeType = hotbarBlockType(player->inventoryHotbarSlot);
-                    int *stack = inventoryCountForType(player, placeType);
-                    if (hit.hit && stack && *stack > 0)
+                    int placeType = hotbarBlockType(player);
+                    int slotIdx = player->inventoryHotbarSlot;
+                    if (placeType > 0 && hoverHit.hit && !player->hotbar[slotIdx].isEmpty() && player->hotbar[slotIdx].count > 0 &&
+                        hoverHit.prevY >= 0 && hoverHit.prevY < terrainWorld.height &&
+                        terrainWorld.getBlock(hoverHit.prevX, hoverHit.prevY, hoverHit.prevZ) == voxel::AIR)
                     {
-                        terrainWorld.placeBlock(hit, placeType);
-                        (*stack)--;
+                        terrainWorld.placeBlock(hoverHit, placeType);
+                        player->hotbar[slotIdx].count--;
+                        if (player->hotbar[slotIdx].count <= 0) player->hotbar[slotIdx].clear();
                         terrainMeshDirty = true;
                     }
                 }
@@ -1725,18 +1993,49 @@ class Playstate : public our::State
                 std::cout << "DEBUG: handEntity or handComp is null! handEntity=" << (void *)handEntity << " handComp=" << (void *)handComp << "\n";
             }
         } 
-        } 
 
         if (terrainMeshDirty)
             rebuildMesh();
-        renderer.render(&engineWorld);
 
-        // Delete particles or hit blocks that have expired outside of chunk builds
+        // Water animation: advance timer and periodically rebuild water chunks
+        our::mesh_utils::advanceWaterAnim((float)deltaTime);
+        waterAnimTimer += (float)deltaTime;
+        if (waterAnimTimer >= 0.25f) {
+            waterAnimTimer = 0.0f;
+            terrainMeshDirty = true;
+        }
+
+        // Bee aggression: if bees are angry, damage player when nearby
+        if (beesAngry && player && isPlaying && playerEntity) {
+            for (auto *e : engineWorld.getEntities()) {
+                if (!e) continue;
+                auto *killable = e->getComponent<our::KillableNPCComponent>();
+                if (!killable || killable->npcType != "bee") continue;
+                float dist = glm::length(e->localTransform.position - playerEntity->localTransform.position);
+                if (dist < 2.0f) {
+                    killable->attackCooldown -= (float)deltaTime;
+                    if (killable->attackCooldown <= 0.0f) {
+                        player->health -= 2.0f;
+                        player->shakeTimer = 0.3f;
+                        player->shakeIntensity = 0.15f;
+                        killable->attackCooldown = 1.5f;
+                        our::AudioSystem::playSound("assets/sounds/Hit.wav");
+                        if (player->health <= 0.0f) {
+                            player->health = 0.0f;
+                            player->isAlive = false;
+                            player->gameState = our::GameState::LOSE;
+                        }
+                    }
+                }
+            }
+        }
+
+        renderer.render(&engineWorld);
         engineWorld.deleteMarkedEntities();
         if (isInventoryOpen)
         {
             renderer.render(&engineWorld);
-            return; // Exit early!
+            return;
         }
     } 
 
@@ -1748,7 +2047,7 @@ class Playstate : public our::State
         our::PlayerComponent *player = playerEntity ? playerEntity->getComponent<our::PlayerComponent>() : nullptr;
         if (!player)
             return;
-        if (key >= GLFW_KEY_1 && key <= GLFW_KEY_5)
+        if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9)
             player->inventoryHotbarSlot = key - GLFW_KEY_1;
     }
 
@@ -1780,7 +2079,6 @@ class Playstate : public our::State
             highlightEdgesMesh = nullptr;
         }
 
-        // --- Clear states that persist between game runs ---
         terrainWorld.activeChunks.clear();
         npcTemplates.clear();
         
@@ -1797,7 +2095,10 @@ class Playstate : public our::State
         hitAnimTime = 0.0f;
         isHitting = false;
         isInventoryOpen = false;
+        beesAngry = false;
+        waterAnimTimer = 0.0f;
 
         our::clearAllAssets();
     }
 };
+

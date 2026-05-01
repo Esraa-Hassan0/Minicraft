@@ -89,6 +89,11 @@ class Menustate: public our::State {
             case voxel::DIRT: return our::AssetLoader<our::Material>::get("grass");
             case voxel::SAND: return our::AssetLoader<our::Material>::get("sand");
             case voxel::WATER: return our::AssetLoader<our::Material>::get("water");
+            case voxel::Glass: return our::AssetLoader<our::Material>::get("glass");
+            case voxel::WOOD: return our::AssetLoader<our::Material>::get("wood");
+            case voxel::LOG: return our::AssetLoader<our::Material>::get("log");
+            case voxel::LEAF: return our::AssetLoader<our::Material>::get("leaf");
+            case voxel::Diamond: return our::AssetLoader<our::Material>::get("diamond");
             default: return our::AssetLoader<our::Material>::get("default");
         }
     }
