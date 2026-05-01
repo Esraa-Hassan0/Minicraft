@@ -17,7 +17,7 @@ namespace our {
         glm::vec3 baseRotation = glm::vec3(glm::radians(110.0f), glm::radians(-15.0f), glm::radians(-20.0f));
 
         // Interaction reach range (how far the hand can interact with objects)
-        float interactionRange = 2.0f;
+        float interactionRange = 100.0f;  // Can hit blocks/animals from far distance
         
         // Animation timing
         float idleAnimationTimer = 0.0f;
@@ -42,15 +42,16 @@ namespace our {
         glm::vec3 targetPosition = glm::vec3(0.0f);
         
         // Collision avoidance
-        float collisionAvoidanceDistance = 0.25f;  // Distance to detect collision ahead
+        float collisionAvoidanceDistance = 1.2f;  // Increased distance to detect collisions earlier (allows hand to move before hitting)
         glm::vec3 collisionAvoidanceOffset = glm::vec3(0.0f);  // Applied offset to avoid collisions
-        float collisionSmoothing = 5.0f;  // Smoothing factor for collision response
+        float collisionSmoothing = 12.0f;  // Faster response to collisions (higher = faster)
+        bool hasCollisionAhead = false;  // Track if collision is currently active
         
-        // Positioning constraints
-        float minPositionX = 0.2f;   // Minimum X (left boundary)
-        float maxPositionX = 0.5f;   // Maximum X (right boundary)
-        float minPositionY = -0.5f;  // Minimum Y (bottom boundary)
-        float maxPositionY = -0.2f;  // Maximum Y (top boundary)
+        // Positioning constraints - expanded to allow more lateral movement for collision avoidance
+        float minPositionX = 0.1f;   // Minimum X (left boundary) - expanded
+        float maxPositionX = 0.6f;   // Maximum X (right boundary) - expanded
+        float minPositionY = -0.7f;  // Minimum Y (bottom boundary) - expanded
+        float maxPositionY = -0.1f;  // Maximum Y (top boundary) - expanded
         float minPositionZ = -0.8f;  // Minimum Z (back boundary)
         float maxPositionZ = -0.4f;  // Maximum Z (forward boundary)
         

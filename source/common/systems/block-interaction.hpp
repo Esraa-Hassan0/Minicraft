@@ -34,6 +34,14 @@ public:
     void initialize(our::World* engineWorld) {
     }
 
+    void destroy() {
+        particles.clear();
+        currentTargetContext = {-1, -1, -1};
+        currentHits = 0;
+        accumulatedBreakTime = 0.0f;
+        particleSpawnTimer = 0.0f;
+    }
+
     float getBreakDuration(int blockType, int toolType = 0) {
         float break_duration=0.4;
         switch (blockType) {
@@ -101,6 +109,10 @@ public:
         else if (blockType == voxel::SAND) matName = "sand";
         else if (blockType == voxel::WOOD) matName = "wood";
         else if (blockType == voxel::Glass) matName = "glass";
+        else if (blockType == voxel::Diamond) matName = "diamond";
+        else if (blockType == voxel::LOG) matName = "log";
+        else if (blockType == voxel::STONE) matName = "stone";
+        else if (blockType == voxel::LEAF) matName = "leaf";
 
         our::Material* material = our::AssetLoader<our::Material>::get(matName);
         our::Mesh* mesh = our::AssetLoader<our::Mesh>::get("cube");

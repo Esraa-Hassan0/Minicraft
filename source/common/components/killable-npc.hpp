@@ -7,6 +7,7 @@ namespace our {
     public:
         int foodReward = 1;
         std::string npcType = "default";
+        float soundTimer = 0.0f;
 
         static std::string getID() { return "KillableNPCComponent"; }
 
