@@ -38,4 +38,7 @@ namespace our::mesh_utils {
 
     // Create a mesh that represents just the edges of a cube (for block highlights)
     Mesh* cubeEdges();
+
+    // Advance water animation timer (call once per frame from play-state)
+    void advanceWaterAnim(float dt);
 }

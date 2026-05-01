@@ -58,6 +58,10 @@
                 "log": "assets/textures/log.png",
                 "leaf": "assets/textures/leaf.png",
                 "hand": "assets/textures/right_hand.png",
+                "wooden_axe": "assets/textures/wooden_axe.png",
+                "wooden_pickaxe": "assets/textures/wooden_pickaxe.png",
+                "stone_axe": "assets/textures/stone_axe.png",
+                "stone_pickaxe": "assets/textures/stone_pickaxe.png",
                 "diamond": "assets/textures/diamond_block.png",
                 "enemy-zombie-tex": "assets/textures/zombie.png",
                 "enemy-skeleton-tex": "assets/textures/skeleton.png",
@@ -560,10 +564,10 @@
                     },
                     "transparent": true,
                     "tint": [
-                        0.0,
-                        0.0,
-                        0.0,
-                        0.2
+                        0.85,
+                        0.9,
+                        1.0,
+                        0.18
                     ]
                 },
                 "pig-mat": {

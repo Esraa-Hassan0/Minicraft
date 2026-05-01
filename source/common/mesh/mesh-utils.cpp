@@ -11,8 +11,13 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+#include <algorithm>
+#include <cmath>
 
 namespace {
+    // Water animation phase - incremented externally via advanceWaterAnim()
+    static float waterAnimTime = 0.0f;
+
     const glm::ivec3 NEIGHBOR_OFFSETS[6] = {
         {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
     };
@@ -55,6 +60,11 @@ namespace {
     }
 }
 
+// Public function to advance water animation time (called from play-state)
+void our::mesh_utils::advanceWaterAnim(float dt) {
+    waterAnimTime += dt;
+}
+
 our::Mesh* our::mesh_utils::loadOBJ(const std::string& filename) {
 
     // The data that we will use to initialize our mesh
@@ -94,24 +104,38 @@ our::Mesh* our::mesh_utils::loadOBJ(const std::string& filename) {
                     attrib.vertices[3 * index.vertex_index + 2]
             };
 
-            vertex.normal = {
-                    attrib.normals[3 * index.normal_index + 0],
-                    attrib.normals[3 * index.normal_index + 1],
-                    attrib.normals[3 * index.normal_index + 2]
-            };
+            if (index.normal_index >= 0 && 3 * index.normal_index + 2 < static_cast<int>(attrib.normals.size())) {
+                vertex.normal = {
+                        attrib.normals[3 * index.normal_index + 0],
+                        attrib.normals[3 * index.normal_index + 1],
+                        attrib.normals[3 * index.normal_index + 2]
+                };
+            } else {
+                vertex.normal = {0.0f, 1.0f, 0.0f};
+            }
 
-            vertex.tex_coord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    attrib.texcoords[2 * index.texcoord_index + 1]
-            };
+            if (index.texcoord_index >= 0 && 2 * index.texcoord_index + 1 < static_cast<int>(attrib.texcoords.size())) {
+                vertex.tex_coord = {
+                        attrib.texcoords[2 * index.texcoord_index + 0],
+                        attrib.texcoords[2 * index.texcoord_index + 1]
+                };
+            } else {
+                vertex.tex_coord = {0.0f, 0.0f};
+            }
 
-
-            vertex.color = {
-                    attrib.colors[3 * index.vertex_index + 0] * 255,
-                    attrib.colors[3 * index.vertex_index + 1] * 255,
-                    attrib.colors[3 * index.vertex_index + 2] * 255,
-                    255
-            };
+            if (index.vertex_index >= 0 && 3 * index.vertex_index + 2 < static_cast<int>(attrib.colors.size())) {
+                auto toByte = [](float value) {
+                    return static_cast<glm::uint8>(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+                };
+                vertex.color = {
+                        toByte(attrib.colors[3 * index.vertex_index + 0]),
+                        toByte(attrib.colors[3 * index.vertex_index + 1]),
+                        toByte(attrib.colors[3 * index.vertex_index + 2]),
+                        255
+                };
+            } else {
+                vertex.color = {255, 255, 255, 255};
+            }
 
             // See if we already stored a similar vertex
             auto it = vertex_map.find(vertex);
@@ -234,6 +258,26 @@ our::mesh_utils::MeshBuildData our::mesh_utils::buildChunkMeshData(const voxel::
                      for (int v = 0; v < 4; ++v) {
                          our::Vertex vertex;
                          vertex.position = blockPos + FACE_VERTICES[face][v];
+
+                         // Water animation: offset top-face Y with a sine wave for stream/ripple effect
+                         if (blockType == voxel::block_types::WATER) {
+                             // Lower water surface slightly so it sits below adjacent solid blocks
+                             if (face == 2) { // Top face
+                                 float wx = (float)worldX + FACE_VERTICES[face][v].x;
+                                 float wz = (float)worldZ + FACE_VERTICES[face][v].z;
+                                 float wave = std::sin(wx * 0.8f + wz * 0.6f + waterAnimTime * 2.0f) * 0.06f
+                                            + std::sin(wx * 1.3f - wz * 0.9f + waterAnimTime * 1.5f) * 0.03f;
+                                 vertex.position.y += wave - 0.15f;
+                             }
+                             // Side faces of water also get a slight inset
+                             if (face != 2 && face != 3) {
+                                 // Slightly move top vertices of side faces down to match lowered surface
+                                 if (FACE_VERTICES[face][v].y > 0.5f) {
+                                     vertex.position.y -= 0.15f;
+                                 }
+                             }
+                         }
+
                          vertex.normal = FACE_NORMALS[face];
                          vertex.color = vertexColor;
                          vertex.tex_coord = FACE_UVS[v];

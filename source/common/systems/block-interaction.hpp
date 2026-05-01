@@ -47,23 +47,21 @@ public:
         switch (blockType) {
             case voxel::SAND:  break_duration= 0.35f; break;  
             case voxel::LOG:  break_duration= 1.5f; break;
-            case voxel::STONE: break_duration= 7.5; break;
-            case voxel::Diamond: break_duration = 30; break;
-            case voxel::Glass: break_duration= 0.2f; 
+            case voxel::STONE: break_duration= 7.5f; break;
+            case voxel::Diamond: break_duration = 30.0f; break;
+            case voxel::Glass: break_duration= 0.2f; break;
         }
-        std::cout<<"breakDuration is"<<break_duration<<"\n";
         int multiplier = 1;
-        if (toolType == static_cast<int>(voxel::ToolType::WoodenPickaxe)) {
-            if (blockType == voxel::STONE || blockType == voxel::Diamond) multiplier = 2;
-        } else if (toolType == static_cast<int>(voxel::ToolType::StonePickaxe)) {
+        if (toolType == voxel::TOOL_WOODEN_PICKAXE) {
             if (blockType == voxel::STONE || blockType == voxel::Diamond) multiplier = 4;
-        } else if (toolType == static_cast<int>(voxel::ToolType::WoodenAxe)) {
-            if (blockType == voxel::WOOD || blockType == voxel::LOG) multiplier = 2;
-        } else if (toolType == static_cast<int>(voxel::ToolType::StoneAxe)) {
+        } else if (toolType == voxel::TOOL_STONE_PICKAXE) {
+            if (blockType == voxel::STONE || blockType == voxel::Diamond) multiplier = 8;
+        } else if (toolType == voxel::TOOL_WOODEN_AXE) {
             if (blockType == voxel::WOOD || blockType == voxel::LOG) multiplier = 4;
+        } else if (toolType == voxel::TOOL_STONE_AXE) {
+            if (blockType == voxel::WOOD || blockType == voxel::LOG) multiplier = 8;
         }
         break_duration /= multiplier;
-                std::cout<<"breakDuration2 is"<<break_duration<<"\n";
         return break_duration;
     }
 
