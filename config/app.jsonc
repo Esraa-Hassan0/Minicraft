@@ -1,7 +1,7 @@
 {
     "start-scene": "menu",
     "window": {
-        "title": "Game",
+        "title": "Minicraft",
         "size": {
             "width": 1280,
             "height": 720
