@@ -1,4 +1,3 @@
-
 <p align="center">
   <img src="./assets/textures/minicraft-title.png" alt="Minicraft Logo" width="600">
 </p>
@@ -10,6 +9,7 @@ A captivating voxel-based sandbox game inspired by Minecraft, built with modern 
 ## 🎮 Game Features
 
 ### Core Gameplay
+
 - **Block-Based World Building**: Place and destroy blocks to create your own structures
 - **Minecraft Textures**: Authentic block textures recreating the classic Minecraft aesthetic
 - **Dynamic Lighting System**: Real-time lighting with dynamic shadows and ambient occlusion
@@ -17,15 +17,18 @@ A captivating voxel-based sandbox game inspired by Minecraft, built with modern 
 - **Persistent World**: Save and load your creations
 
 ### Entities & NPCs
+
 - **Three Enemy Types**: Encounter diverse hostile mobs with unique behaviors
 - **Animal Companions**: Discover peaceful wildlife in your world
 - **Advanced AI**: Intelligent pathfinding and behavior systems
 
 ### Audio & Immersion
+
 - **Sound Effects**: Rich audio feedback for interactions, combat, and environmental events
 - **Spatial Audio**: Direction-aware sound positioning
 
 ### Graphics & Visuals
+
 - **Voxel Rendering**: Efficient chunk-based rendering system
 - **Post-Processing Effects**: Visual enhancements and special effects
 - **Weather System**: Dynamic environmental conditions
@@ -42,18 +45,21 @@ Minicraft draws inspiration from Minecraft's iconic block-based world design and
 ## All Features & Systems
 
 ### World Generation & Management
+
 - Block-based voxel world with dynamic loading
 - Chunk system for efficient memory and rendering
 - Save/load persistent worlds
 - Dynamic lighting and shadow rendering
 
 ### Entity Systems
+
 - Advanced AI pathfinding for enemies and animals
 - Entity collision detection and physics
 - Behavior trees for complex NPC interactions
 - Animation system for entities
 
 ### Gameplay Mechanics
+
 - Mining and block destruction with durability
 - Inventory system with item management
 - Crafting recipes and crafting table
@@ -62,11 +68,13 @@ Minicraft draws inspiration from Minecraft's iconic block-based world design and
 - Respawn mechanics
 
 ### Combat & Interaction
+
 - Attack and combat system
 - Enemy drop mechanics
 - Interaction zones and callbacks
 
 ### Visual Polish
+
 - Dynamic camera system
 - Entity animations and skeletal rigging
 - Particle systems for effects
@@ -87,37 +95,29 @@ Minicraft draws inspiration from Minecraft's iconic block-based world design and
       Main Menu
     </td>
     <td align="center">
+      <img src="docs/instructions.png" width="400"><br>
+      Instructions
+    </td>
+    <td align="center">
       <img src="docs/game-ui.png" width="400"><br>
+      Game UI
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/in-game-ui.png" width="400"><br>
       In-Game UI
+    </td>
+    <td align="center">
+      <img src="docs/inventory.png" width="400"><br>
+      Inventory
+    </td>
+    <td align="center">
+      <img src="docs/water.png" width="400"><br>
+      Water
     </td>
   </tr>
 </table>
-
-<!-- ### Animals & Wildlife
-
-<table align="center">
-  <tr>
-    <td align="center">
-      <img src="docs/animal1.png" width="250"><br>
-      Pig
-    </td>
-    <td align="center">
-      <img src="docs/animal2.png" width="250"><br>
-      Bee
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="docs/animal3.png" width="250"><br>
-      Horse
-    </td>
-    <td align="center">
-      <img src="docs/animal6.png" width="250"><br>
-      Sheep
-    </td>
-  </tr>
-</table> -->
-
 
 ---
 
@@ -187,10 +187,10 @@ sudo apt-get install build-essential cmake libgl1-mesa-dev libglew-dev
 ### Configuration
 
 Game settings can be customized via JSON configuration files in the `config/` directory:
+
 - `app.jsonc` - Main game configuration
 - World and gameplay settings
 - Audio and graphics preferences
-
 
 ## 📁 Project Structure
 
@@ -269,7 +269,5 @@ All dependencies are included in the `vendor/` directory for easy building.
 ## Contributors
 
 | <a href="https://avatars.githubusercontent.com/Esraa-Hassan0?v=4"><img src="https://avatars.githubusercontent.com/Esraa-Hassan0?v=4" alt="Esraa Hassan" width="150"></a> | <a href="https://avatars.githubusercontent.com/hagar3bdelsalam?v=4"><img src="https://avatars.githubusercontent.com/hagar3bdelsalam?v=4" alt="Hagar Abdelsalam" width="150"></a> | <a href="https://avatars.githubusercontent.com/Safan05?v=4"><img src="https://avatars.githubusercontent.com/Safan05?v=4" alt="Abdallah Safan" width="150"></a> | <a href="https://avatars.githubusercontent.com/mohamedYasserElbatesh?v=4"><img src="https://avatars.githubusercontent.com/mohamedYasserElbatesh?v=4" alt="Mohamed Yasser" width="150"></a> |
-| :-----------------------------------------------------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-|                                                           [Esraa Hassan](https://github.com/Esraa-Hassan0)                                                            |                                                           [Hagar Abdelsalam](https://github.com/hagar3bdelsalam)                                                            |                                                          [Abdallah Safan](https://github.com/Safan05)                                                           |                                                            [Mohamed Yasser](https://github.com/mohamedYasserElbatesh)                                                            |
-
-
+| :----------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+|                                                             [Esraa Hassan](https://github.com/Esraa-Hassan0)                                                             |                                                              [Hagar Abdelsalam](https://github.com/hagar3bdelsalam)                                                              |                                                          [Abdallah Safan](https://github.com/Safan05)                                                          |                                                                 [Mohamed Yasser](https://github.com/mohamedYasserElbatesh)                                                                 |
