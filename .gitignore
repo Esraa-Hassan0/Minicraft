@@ -58,9 +58,6 @@ imgui.ini
 /.env/
 **pycache**/
 
-# Generated documentation
-
-/docs/
 
 # CMake user presets
 
