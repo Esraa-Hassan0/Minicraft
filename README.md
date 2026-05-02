@@ -78,42 +78,50 @@ Minicraft draws inspiration from Minecraft's iconic block-based world design and
 
 ## Screenshots & Visuals
 
-### Gameplay & World
-
-| Feature | Preview |
-|---------|---------|
-| Voxel World | *[Screenshot to be added]* |
-| Block Building | *[Screenshot to be added]* |
-| Environment | *[Screenshot to be added]* |
-
-### Enemies
-
-| Enemy Type | Preview |
-|-----------|---------|
-| Skeleton | ![](docs/enemy1.png) |
-| Zombie | *[Screenshot to be added]* |
-| Creeper | *[Screenshot to be added]* |
-
-### Animals & Wildlife
-
-| Animal | Preview |
-|--------|---------|
-| Pig | ![](docs/animal1.png) |
-| Bee | ![](docs/animal2.png)  |
-| Horse | ![](docs/animal3.png)  |
-| Sheep | ![](docs/animal6.png)  |
-
 ### User Interface
 
-| UI Element | Preview |
-|-----------|---------|
-| Main Menu | ![](docs/main-menu.png) |
-| In-Game UI | ![](docs/in-game-ui.png) |
-| Inventory System | ![](docs/inventory-system.png) |
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="docs/main-menu.png" width="400"><br>
+      Main Menu
+    </td>
+    <td align="center">
+      <img src="docs/game-ui.png" width="400"><br>
+      In-Game UI
+    </td>
+  </tr>
+</table>
+
+<!-- ### Animals & Wildlife
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="docs/animal1.png" width="250"><br>
+      Pig
+    </td>
+    <td align="center">
+      <img src="docs/animal2.png" width="250"><br>
+      Bee
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/animal3.png" width="250"><br>
+      Horse
+    </td>
+    <td align="center">
+      <img src="docs/animal6.png" width="250"><br>
+      Sheep
+    </td>
+  </tr>
+</table> -->
+
 
 ---
 
-## 🎵 Audio Features
+## Audio Features
 
 - **Ambient Music**: Dynamic background music that adapts to gameplay
 - **Sound Effects**:
@@ -219,7 +227,7 @@ Graphics-project/
 
 ---
 
-## 🛠️ Game Development
+## Game Development
 
 ### Code Style
 
@@ -265,4 +273,3 @@ All dependencies are included in the `vendor/` directory for easy building.
 |                                                           [Esraa Hassan](https://github.com/Esraa-Hassan0)                                                            |                                                           [Hagar Abdelsalam](https://github.com/hagar3bdelsalam)                                                            |                                                          [Abdallah Safan](https://github.com/Safan05)                                                           |                                                            [Mohamed Yasser](https://github.com/mohamedYasserElbatesh)                                                            |
 
 
----
